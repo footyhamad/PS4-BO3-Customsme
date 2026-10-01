@@ -28,7 +28,8 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish "src/FFPorter.Cli/FFPorter.Cli.csproj" -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false `
+            -p:AssemblyName="PS4.FF.Porter" `
             -p:DebugType=none -p:DebugSymbols=false `
             -p:NuGetAudit=false -o "${{ github.workspace }}\dist"
 
@@ -42,12 +43,12 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path "${{ github.workspace }}\dist\ffport.exe","${{ github.workspace }}\dist\SHA256.txt" `
-            -DestinationPath "${{ github.workspace }}\PS4.FF.Porter-fixed.zip"
+            -DestinationPath "${{ github.workspace }}\PS4.FF.Porter-fixed-v2.zip"
 
       - name: Upload fixed EXE
         uses: actions/upload-artifact@v4
         with:
-          name: PS4.FF.Porter-fixed
+          name: PS4.FF.Porter-fixed-v2
           path: |
             PS4.FF.Porter-fixed.zip
             dist/ffport.exe
