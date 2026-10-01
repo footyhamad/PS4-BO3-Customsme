@@ -1,0 +1,56 @@
+name: Build FF Porter (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Tool/**"
+      - ".github/workflows/build-ff-porter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        working-directory: Tool
+        shell: pwsh
+        run: |
+          dotnet publish "src/FFPorter.Cli/FFPorter.Cli.csproj" -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=none -p:DebugSymbols=false `
+            -p:NuGetAudit=false -o "${{ github.workspace }}\dist"
+
+      - name: SHA256
+        shell: pwsh
+        run: |
+          Get-FileHash "${{ github.workspace }}\dist\ffport.exe" -Algorithm SHA256 |
+            Format-List | Out-File "${{ github.workspace }}\dist\SHA256.txt"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ github.workspace }}\dist\ffport.exe","${{ github.workspace }}\dist\SHA256.txt" `
+            -DestinationPath "${{ github.workspace }}\PS4.FF.Porter-fixed.zip"
+
+      - name: Upload fixed EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PS4.FF.Porter-fixed
+          path: |
+            PS4.FF.Porter-fixed.zip
+            dist/ffport.exe
+            dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30
