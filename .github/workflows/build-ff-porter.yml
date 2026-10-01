@@ -29,9 +29,12 @@ jobs:
         run: |
           dotnet publish "src/FFPorter.Cli/FFPorter.Cli.csproj" -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false `
-            -p:AssemblyName="PS4.FF.Porter" `
-            -p:DebugType=none -p:DebugSymbols=false `
+                       -p:DebugType=none -p:DebugSymbols=false `
             -p:NuGetAudit=false -o "${{ github.workspace }}\dist"
+
+      - name: Rename release executable
+        shell: pwsh
+        run: Move-Item "${{ github.workspace }}\dist\PS4.FF.Porter.exe" "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Force
 
       - name: SHA256
         shell: pwsh
