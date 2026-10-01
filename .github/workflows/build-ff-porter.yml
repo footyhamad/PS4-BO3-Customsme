@@ -1,4 +1,4 @@
-name: Build FF Porter (Windows)
+name: Build FF Porter
 
 on:
   push:
@@ -23,35 +23,29 @@ jobs:
         with:
           dotnet-version: "10.0.112"
 
-      - name: Publish
+      - name: Build
         working-directory: Tool
         shell: pwsh
         run: |
           dotnet publish "src/FFPorter.Cli/FFPorter.Cli.csproj" -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:PublishReadyToRun=true -p:DebugType=none -p:DebugSymbols=false `
-            -p:NuGetAudit=false -o "${{ github.workspace }}\dist"
-      - name: Rename release executable
-        shell: pwsh
-        run: Move-Item "${{ github.workspace }}\dist\ffport.exe" "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Force
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o "${{ github.workspace }}\dist"
 
-      - name: SHA256
+      - name: Rename
+        shell: pwsh
+        run: Rename-Item "${{ github.workspace }}\dist\ffport.exe" "PS4.FF.Porter.exe"
+
+      - name: Check
         shell: pwsh
         run: |
-          Get-FileHash "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Algorithm SHA256 |
-            Format-List | Out-File "${{ github.workspace }}\dist\SHA256.txt"
+          Get-Item "${{ github.workspace }}\dist\PS4.FF.Porter.exe" | Select-Object Name, Length
+          Get-FileHash "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Algorithm SHA256
 
-      - name: Package
-        shell: pwsh
-        run: |
-          Get-Item "${{ github.workspace }}\dist\PS4.FF.Porter.exe" |
-            Select-Object Name, Length | Format-Table | Out-File "${{ github.workspace }}\dist\BUILD-INFO.txt"
-      - name: Upload fixed EXE
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: PS4.FF.Porter-fixed-v3
-          path: |
-            dist/PS4.FF.Porter.exe
-            dist/SHA256.txt
+          name: PS4.FF.Porter
+          path: dist/PS4.FF.Porter.exe
           if-no-files-found: error
           retention-days: 30
