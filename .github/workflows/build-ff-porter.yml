@@ -39,13 +39,13 @@ jobs:
       - name: SHA256
         shell: pwsh
         run: |
-          Get-FileHash "${{ github.workspace }}\dist\ffport.exe" -Algorithm SHA256 |
+          Get-FileHash "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Algorithm SHA256 |
             Format-List | Out-File "${{ github.workspace }}\dist\SHA256.txt"
 
       - name: Package
         shell: pwsh
         run: |
-          Compress-Archive -Path "${{ github.workspace }}\dist\ffport.exe","${{ github.workspace }}\dist\SHA256.txt" `
+          Compress-Archive -Path "${{ github.workspace }}\dist\PS4.FF.Porter.exe","${{ github.workspace }}\dist\SHA256.txt" `
             -DestinationPath "${{ github.workspace }}\PS4.FF.Porter-fixed-v2.zip"
 
       - name: Upload fixed EXE
@@ -53,8 +53,8 @@ jobs:
         with:
           name: PS4.FF.Porter-fixed-v2
           path: |
-            PS4.FF.Porter-fixed.zip
-            dist/ffport.exe
+            PS4.FF.Porter-fixed-v2.zip
+            dist/PS4.FF.Porter.exe
             dist/SHA256.txt
           if-no-files-found: error
           retention-days: 30
