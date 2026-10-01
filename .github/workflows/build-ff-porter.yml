@@ -34,7 +34,7 @@ jobs:
 
       - name: Rename release executable
         shell: pwsh
-        run: Move-Item "${{ github.workspace }}\dist\PS4.FF.Porter.exe" "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Force
+        run: Move-Item "${{ github.workspace }}\dist\ffport.exe" "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Force
 
       - name: SHA256
         shell: pwsh
