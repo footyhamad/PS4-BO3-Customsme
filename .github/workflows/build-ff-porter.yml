@@ -27,14 +27,14 @@ jobs:
         working-directory: Tool
         shell: pwsh
         run: |
-          dotnet publish "src/FFPorter.Cli/FFPorter.Cli.csproj" -c Release -r win-x64 --self-contained true `
+          dotnet publish "src/FFPorter.Desktop.T7/FFPorter.Desktop.T7.csproj" -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -o "${{ github.workspace }}\dist"
 
       - name: Rename
         shell: pwsh
-        run: Rename-Item "${{ github.workspace }}\dist\ffport.exe" "PS4.FF.Porter.exe"
+        run: Rename-Item "${{ github.workspace }}\dist\PS4 .FF Porter.exe" "PS4.FF.Porter.exe"
 
       - name: Check
         shell: pwsh
