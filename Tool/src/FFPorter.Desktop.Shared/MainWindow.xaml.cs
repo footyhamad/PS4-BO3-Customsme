@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.0.0";
+    private const string ForkVersion = "Fork 1.2.0.1";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -143,7 +143,6 @@ public partial class MainWindow : Window
         AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = OutputButton.IsEnabled = GameFolderButton.IsEnabled = ClearCacheButton.IsEnabled = !testing && !_running;
         RemoveButton.IsEnabled = ClearButton.IsEnabled = !testing && !_running && _jobs.Count > 0;
         ConvertButton.IsEnabled = !testing && !_running && !_clearing && _jobs.Count > 0;
-        RefreshActionButtons();
         SetUpdateButtons();
     }
 
@@ -308,6 +307,11 @@ public partial class MainWindow : Window
         }
         MessageBox.Show(this, rows.Count == 0 ? "No completed conversions are in the history yet." : string.Join(Environment.NewLine, rows),
             "Conversion history · last 10", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void ChangelogClick(object sender, RoutedEventArgs e)
+    {
+        Process.Start(new ProcessStartInfo("https://github.com/footyhamad/PS4-BO3-Customsme/blob/main/CHANGELOG.md") { UseShellExecute = true });
     }
 
     private void AddFilesClick(object sender, RoutedEventArgs e)
