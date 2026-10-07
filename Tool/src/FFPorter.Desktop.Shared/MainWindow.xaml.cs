@@ -5,6 +5,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -25,7 +26,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<Job> _jobs = [];
     private readonly BackendProcess _backend = new();
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(1) };
-    private bool _running, _stop, _clearing;
+    private bool _running, _stop, _clearing, _testing;
     private readonly bool _firstRun = !Directory.Exists(Workspace.WorkDirectory);
     private Job? _current, _shown;
     private int _index, _count;
@@ -33,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.0.1";
+    private const string ForkVersion = "Fork 1.2.0.3";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -236,9 +237,10 @@ public partial class MainWindow : Window
                 if (code != 0)
                     failures++;
             }
-            foreach (string xpak in Directory.Exists(outputFolder)
+            IEnumerable<string> xpaks = Directory.Exists(outputFolder)
                 ? Directory.EnumerateFiles(outputFolder, "*.xpak", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileName)
-                : [])
+                : Enumerable.Empty<string>();
+            foreach (string xpak in xpaks)
             {
                 SetStatus("Testing XPAK", Path.GetFileName(xpak));
                 int code = await _backend.RunAsync([job.Codename, "xpak-verify", xpak],

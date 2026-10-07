@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.0.3
+- Fixed the desktop build after adding the scan/test controls: restored the testing state field, imported System.Text.Json, and normalized XPAK enumeration.
+- Synchronized the visible fork version with the desktop assembly version.
+
 ## Fork 1.2.0.1
 - Fixed the desktop action-lock state used while scanning/testing.
 - Added a CHANGELOG button to the desktop tool.
