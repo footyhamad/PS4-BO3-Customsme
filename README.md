@@ -1,5 +1,9 @@
 A tool to convert BO3 customs to PS4 and a SPRX to load them on HEN consoles.
 
+## FF Porter fork version
+
+The fork starts at **Fork 1.00** and is based on **ItsJokerZz v2.00**. The desktop tool includes **CHECK VERSION** and **UPDATE TOOL**. Updates are built by GitHub Actions and downloaded from this fork's rolling `fork-latest` release.
+
 ## Getting started
 
 Everything you need is on the [Releases](../../releases) page: the tool, SPRX, and dependencies. 
