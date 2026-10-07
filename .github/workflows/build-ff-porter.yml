@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -41,11 +41,39 @@ jobs:
         run: |
           Get-Item "${{ github.workspace }}\dist\PS4.FF.Porter.exe" | Select-Object Name, Length
           Get-FileHash "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Algorithm SHA256
+          (Get-FileHash "${{ github.workspace }}\dist\PS4.FF.Porter.exe" -Algorithm SHA256).Hash + "  PS4.FF.Porter.exe" | Set-Content "${{ github.workspace }}\dist\PS4.FF.Porter.exe.sha256"
+          Copy-Item "${{ github.workspace }}\Tool\FORK_VERSION.txt" "${{ github.workspace }}\dist\FORK_VERSION.txt"
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: PS4.FF.Porter
-          path: dist/PS4.FF.Porter.exe
+          path: |
+            dist/PS4.FF.Porter.exe
+            dist/PS4.FF.Porter.exe.sha256
+            dist/FORK_VERSION.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish rolling fork release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f fork-latest "${{ github.sha }}"
+          git push origin refs/tags/fork-latest --force
+
+          $version = (Get-Content "${{ github.workspace }}\Tool\FORK_VERSION.txt" -Raw).Trim()
+          if (gh release view fork-latest *> $null) {
+            gh release edit fork-latest --title "PS4 FF Porter $version" --notes "Rolling build of the FF Porter fork." --latest=false
+          } else {
+            gh release create fork-latest --title "PS4 FF Porter $version" --notes "Rolling build of the FF Porter fork." --latest=false
+          }
+
+          gh release upload fork-latest `
+            "${{ github.workspace }}\dist\PS4.FF.Porter.exe" `
+            "${{ github.workspace }}\dist\PS4.FF.Porter.exe.sha256" `
+            "${{ github.workspace }}\dist\FORK_VERSION.txt" `
+            --clobber
