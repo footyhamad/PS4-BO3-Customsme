@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.0.3";
+    private const string ForkVersion = "Fork 1.2.1.0";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -692,14 +692,15 @@ public partial class MainWindow : Window
                 : $"update Porter from {ForkVersion} to {remote}";
             MessageBoxResult answer = MessageBox.Show(
                 this,
-                $"Do you want to {change}?{Environment.NewLine}{Environment.NewLine}The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
+                $"Do you want to {change}?{Environment.NewLine}{Environment.NewLine}The new EXE will be downloaded and verified before you are asked to restart.",
                 "Update tool",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
             if (answer != MessageBoxResult.Yes)
                 return;
 
-            tempExe = Path.Combine(Path.GetTempPath(), $"PS4.FF.Porter-update-{Guid.NewGuid():N}.exe");
+            tempExe = Path.Combine(Path.GetDirectoryName(GetCurrentExePath()) ?? Path.GetTempPath(),
+                $".PS4.FF.Porter-update-{Guid.NewGuid():N}.tmp");
             string tempHash = tempExe + ".sha256";
 
             SetUpdateProgress("Updating the tool", $"Downloading {remote}…", 0);
@@ -727,7 +728,21 @@ public partial class MainWindow : Window
 
             try { File.Delete(tempHash); } catch { }
 
-            SetUpdateProgress("Update verified", "Installing the verified build…", 1);
+            SetUpdateProgress("Update verified", "The new build is downloaded and verified.", 1);
+
+            MessageBoxResult restart = MessageBox.Show(
+                this,
+                $"Update {remote} is ready to install.{Environment.NewLine}{Environment.NewLine}Restart requires closing the app. The verified new EXE will replace the old EXE in:{Environment.NewLine}{exePath}{Environment.NewLine}{Environment.NewLine}Close and restart now?",
+                "Restart required",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (restart != MessageBoxResult.Yes)
+            {
+                SetUpdateProgress("Update downloaded", "The verified update is ready. Restart from UPDATE TOOL to install it.", 1);
+                return;
+            }
+
+            SetUpdateProgress("Restarting", "Closing the app and replacing the old EXE…", 1);
 
             string script = string.Join(Environment.NewLine, new[]
             {
@@ -735,25 +750,34 @@ public partial class MainWindow : Window
                 "$target = " + PsQuote(exePath),
                 "$temp = " + PsQuote(tempExe),
                 "$targetPid = " + Environment.ProcessId,
+                "$failed = $false",
                 "",
                 "for ($i = 0; $i -lt 120; $i++) {",
                 "    if ($null -eq (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) { break }",
                 "    Start-Sleep -Milliseconds 250",
                 "}",
                 "",
-                "for ($i = 0; $i -lt 40; $i++) {",
-                "    try {",
-                "        [System.IO.File]::Move($temp, $target, $true)",
-                "        Start-Process -FilePath $target",
-                "        exit 0",
+                "if ($null -ne (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) {",
+                "    $failed = $true",
+                "}",
+                "else {",
+                "    for ($i = 0; $i -lt 40; $i++) {",
+                "        try {",
+                "            if (-not (Test-Path -LiteralPath $temp)) { throw 'The downloaded update file is missing.' }",
+                "            [System.IO.File]::Replace($temp, $target, $null, $true)",
+                "            Start-Process -FilePath $target",
+                "            exit 0",
+                "        }",
+                "        catch {",
+                "            Start-Sleep -Milliseconds 500",
+                "        }",
                 "    }",
-                "    catch {",
-                "        Start-Sleep -Milliseconds 500",
-                "    }",
+                "    $failed = $true",
                 "}",
                 "",
-                "if (Test-Path -LiteralPath $temp) {",
-                "    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue",
+                "if ($failed) {",
+                "    try { Start-Process -FilePath $target } catch { }",
+                "    exit 1",
                 "}",
             });
 

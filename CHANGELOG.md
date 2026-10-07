@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.0
+- Fixed the updater flow so the restart prompt appears only after the new EXE is fully downloaded and SHA-256 verified.
+- The confirmed restart now closes the app, replaces the old EXE in its original directory, and launches the new build.
+- The updater stages the replacement beside the existing EXE so the final replacement uses the same drive.
+
 ## Fork 1.2.0.3
 - Fixed the desktop build after adding the scan/test controls: restored the testing state field, imported System.Text.Json, and normalized XPAK enumeration.
 - Synchronized the visible fork version with the desktop assembly version.
