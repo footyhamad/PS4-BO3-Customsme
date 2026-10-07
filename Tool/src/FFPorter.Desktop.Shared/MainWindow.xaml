@@ -268,6 +268,12 @@
           <ToggleButton x:Name="LogToggle" Style="{StaticResource Toggle.Ghost}" Checked="LogToggled" Unchecked="LogToggled" ToolTip="Show everything the converter printed">
             <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Text.Icon}" Text="&#xE756;" Margin="0,0,8,0"/><TextBlock Text="Log"/></StackPanel>
           </ToggleButton>
+          <Button x:Name="CheckVersionButton" Style="{StaticResource Button.Ghost}" Margin="10,0,0,0" Padding="14,6" Click="CheckVersionClick" ToolTip="Check the installed Fork version against GitHub">
+            <TextBlock Text="CHECK VERSION" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
+          <Button x:Name="UpdateToolButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="14,6" Click="UpdateToolClick" ToolTip="Download the newest built Porter from your GitHub fork">
+            <TextBlock Text="UPDATE TOOL" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
           <Button x:Name="CancelButton" Content="Cancel" Margin="10,0,0,0" MinHeight="36" Padding="16,6" Click="CancelClick" Visibility="Collapsed"/>
           <Button x:Name="ConvertButton" Style="{StaticResource Button.Primary}" Margin="10,0,0,0" Click="ConvertClick" IsEnabled="False">
             <StackPanel Orientation="Horizontal">
