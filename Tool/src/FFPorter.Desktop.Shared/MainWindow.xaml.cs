@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.00";
+    private const string ForkVersion = "Fork 1.01";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -372,6 +372,24 @@ public partial class MainWindow : Window
         Progress.Visibility = _running || Progress.Value > 0 ? Visibility.Visible : Visibility.Hidden;
     }
 
+    private void SetUpdateProgress(string status, string detail, double? progress = null)
+    {
+        StatusText.Text = status;
+        DetailText.Text = detail.Length > 0 ? "   " + detail : "";
+        Progress.IsIndeterminate = !progress.HasValue;
+        Progress.Value = progress ?? 0;
+        PercentText.Text = progress.HasValue ? $"{progress.Value:P0}" : "Working…";
+        Progress.Visibility = Visibility.Visible;
+    }
+
+    private void ResetUpdateProgress()
+    {
+        Progress.IsIndeterminate = false;
+        Progress.Value = 0;
+        Progress.Visibility = Visibility.Hidden;
+        PercentText.Text = "";
+    }
+
     private void SetBusy(bool busy)
     {
         _running = busy;
@@ -430,6 +448,7 @@ public partial class MainWindow : Window
         string? tempExe = null;
         try
         {
+            SetUpdateProgress("Checking for updates", "Reading the latest fork build…");
             string? remote = await ReadRemoteForkVersion();
             string? remoteHash = await ReadRemoteForkHash();
             if (remote == null || remoteHash == null)
@@ -463,10 +482,11 @@ public partial class MainWindow : Window
             tempExe = Path.Combine(Path.GetTempPath(), $"PS4.FF.Porter-update-{Guid.NewGuid():N}.exe");
             string tempHash = tempExe + ".sha256";
 
-            SetStatus("Updating the tool", $"Downloading {remote}");
-            await DownloadFile(ForkExeUrl, tempExe);
-            await DownloadFile(ForkHashUrl, tempHash);
+            SetUpdateProgress("Updating the tool", $"Downloading {remote}…", 0);
+            await DownloadFile(ForkExeUrl, tempExe, "Porter.exe", 0, 0.80);
+            await DownloadFile(ForkHashUrl, tempHash, "checksum", 0.80, 0.02);
 
+            SetUpdateProgress("Validating download", "Checking the executable…", 0.85);
             FileInfo downloaded = new(tempExe);
             if (downloaded.Length < 1024 * 1024)
                 throw new InvalidDataException("The downloaded Porter executable is unexpectedly small.");
@@ -479,12 +499,15 @@ public partial class MainWindow : Window
                     throw new InvalidDataException("The downloaded file is not a Windows executable.");
             }
 
+            SetUpdateProgress("Verifying download", "Calculating SHA-256…", 0.90);
             string expectedHash = ParseSha256(File.ReadAllText(tempHash));
             string actualHash = await ComputeSha256(tempExe);
             if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"SHA-256 mismatch. Expected {expectedHash}, got {actualHash}.");
 
             try { File.Delete(tempHash); } catch { }
+
+            SetUpdateProgress("Update verified", "Installing the verified build…", 1);
 
             string script = string.Join(Environment.NewLine, new[]
             {
@@ -539,6 +562,8 @@ public partial class MainWindow : Window
             }
             _updating = false;
             SetUpdateButtons();
+            if (!Application.Current.Dispatcher.HasShutdownStarted)
+                ResetUpdateProgress();
         }
     }
 
@@ -564,13 +589,34 @@ public partial class MainWindow : Window
         return version.StartsWith("Fork ", StringComparison.OrdinalIgnoreCase) ? version : null;
     }
 
-    private static async Task DownloadFile(string url, string path)
+    private async Task DownloadFile(string url, string path, string label, double start, double span)
     {
         using HttpResponseMessage response = await UpdateClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
+
+        long total = response.Content.Headers.ContentLength ?? -1;
+        long completed = 0;
+        byte[] buffer = new byte[64 * 1024];
+
         await using Stream input = await response.Content.ReadAsStreamAsync();
         await using FileStream output = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
-        await input.CopyToAsync(output);
+
+        while (true)
+        {
+            int read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length));
+            if (read <= 0)
+                break;
+
+            await output.WriteAsync(buffer.AsMemory(0, read));
+            completed += read;
+
+            double? fileProgress = total > 0 ? Math.Clamp((double)completed / total, 0, 1) : null;
+            double? overall = fileProgress.HasValue ? start + fileProgress.Value * span : null;
+            string detail = total > 0
+                ? $"Downloading {label} · {Job.SizeText(completed)} / {Job.SizeText(total)}"
+                : $"Downloading {label} · {Job.SizeText(completed)}";
+            SetUpdateProgress("Updating the tool", detail, overall);
+        }
     }
 
     private static async Task<string> ComputeSha256(string path)
