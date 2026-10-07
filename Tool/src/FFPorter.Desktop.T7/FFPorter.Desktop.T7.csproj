@@ -9,10 +9,10 @@
     <RootNamespace>FFPorter.Desktop</RootNamespace>
     <StartupObject>FFPorter.Desktop.Program</StartupObject>
     <CETCompat>false</CETCompat>
-    <Version>1.2.1.2</Version>
-    <AssemblyVersion>1.2.1.2</AssemblyVersion>
-    <FileVersion>1.2.1.2</FileVersion>
-    <InformationalVersion>Fork 1.2.1.2</InformationalVersion>
+    <Version>1.2.1.3</Version>
+    <AssemblyVersion>1.2.1.3</AssemblyVersion>
+    <FileVersion>1.2.1.3</FileVersion>
+    <InformationalVersion>Fork 1.2.1.3</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>

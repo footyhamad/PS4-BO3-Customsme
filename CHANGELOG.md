@@ -1,9 +1,14 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.3
+- Added visible updater progress to version checks as well as downloads, verification and restart preparation.
+- Corrected the changelog structure from 1.2.1.2.
+
 ## Fork 1.2.1.2
 - Added a dedicated updater overlay so checking, downloading, verifying and restarting visibly report their current state and progress.
 - Kept updater progress separate from conversion UI so the existing queue, conversion controls and startup preparation flow are not affected.
 
+## Fork 1.2.1.1
 - Fixed existing installs being blocked by the full-window preparation overlay during startup.
 - The preparation overlay now appears only on the first setup run and always clears in a finally block.
 
