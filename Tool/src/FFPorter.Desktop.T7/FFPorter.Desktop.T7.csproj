@@ -9,6 +9,11 @@
     <RootNamespace>FFPorter.Desktop</RootNamespace>
     <StartupObject>FFPorter.Desktop.Program</StartupObject>
     <CETCompat>false</CETCompat>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>Fork 1.00</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FFPorter.Desktop.Shared\FFPorter.Desktop.Shared.csproj" />
