@@ -400,24 +400,14 @@ public partial class MainWindow : Window
 
             bool current = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase);
             string status = current
-                ? $"You are up to date.
-
-Installed: {ForkVersion}
-GitHub: {remote}"
-                : $"A newer fork build is available.
-
-Installed: {ForkVersion}
-GitHub: {remote}
-
-Use UPDATE TOOL to install it.";
+                ? $"You are up to date.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}{Environment.NewLine}GitHub: {remote}"
+                : $"A newer fork build is available.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}{Environment.NewLine}GitHub: {remote}{Environment.NewLine}{Environment.NewLine}Use UPDATE TOOL to install it.";
 
             MessageBox.Show(this, status, "Porter version", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception error) when (error is HttpRequestException or IOException or TaskCanceledException)
         {
-            MessageBox.Show(this, $"Could not reach the fork update service.
-
-{error.Message}", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, $"Could not reach the fork update service.{Environment.NewLine}{Environment.NewLine}{error.Message}", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -444,17 +434,13 @@ Use UPDATE TOOL to install it.";
 
             if (string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase))
             {
-                MessageBox.Show(this, $"Already up to date.
-
-Installed: {ForkVersion}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, $"Already up to date.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             MessageBoxResult answer = MessageBox.Show(
                 this,
-                $"Update Porter from {ForkVersion} to {remote}?
-
-The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
+                $"Update Porter from {ForkVersion} to {remote}?{Environment.NewLine}{Environment.NewLine}The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
                 "Update tool",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
@@ -532,9 +518,7 @@ if (Test-Path -LiteralPath $temp) {{
         }
         catch (Exception error) when (error is HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or TaskCanceledException)
         {
-            MessageBox.Show(this, $"Update failed.
-
-{error.Message}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"Update failed.{Environment.NewLine}{Environment.NewLine}{error.Message}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -575,8 +559,7 @@ if (Test-Path -LiteralPath $temp) {{
 
     private static string ParseSha256(string text)
     {
-        foreach (string token in text.Split([' ', '	', '', '
-'], StringSplitOptions.RemoveEmptyEntries))
+        foreach (string token in text.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
         {
             if (token.Length != 64)
                 continue;
@@ -594,7 +577,6 @@ if (Test-Path -LiteralPath $temp) {{
         }
         throw new InvalidDataException("The release checksum file did not contain a valid SHA-256 hash.");
     }
-
     private static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
 
     private void SetUpdateButtons()
