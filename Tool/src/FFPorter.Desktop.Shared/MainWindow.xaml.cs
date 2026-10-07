@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.1.0.0";
+    private const string ForkVersion = "Fork 1.2.0.0";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         Closing += WindowClosing;
         _clock.Tick += (_, _) => ShowProgress();
         RefreshQueue();
+        RefreshActionButtons();
     }
 
 
@@ -122,6 +123,193 @@ public partial class MainWindow : Window
         ShowPanel();
     }
 
+    private Job? SingleSelectedJob() => JobList.SelectedItems.Count == 1 ? JobList.SelectedItem as Job : null;
+
+    private void RefreshActionButtons()
+    {
+        bool idle = !_running && !_clearing && !_updating && !_testing;
+        Job? selected = SingleSelectedJob();
+        RetryFailedButton.IsEnabled = idle && _jobs.Any(j => j.State == RunStates.Failed);
+        ScanMapButton.IsEnabled = idle && selected != null;
+        TestOutputButton.IsEnabled = idle && selected != null && File.Exists(Path.Combine(Settings.OutputFor(selected), Path.GetFileName(selected.MainFile)));
+        DiagnosticsButton.IsEnabled = idle && selected != null;
+        HistoryButton.IsEnabled = idle;
+        ProfileComboBox.IsEnabled = idle;
+    }
+
+    private void SetTesting(bool testing)
+    {
+        _testing = testing;
+        AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = OutputButton.IsEnabled = GameFolderButton.IsEnabled = ClearCacheButton.IsEnabled = !testing && !_running;
+        RemoveButton.IsEnabled = ClearButton.IsEnabled = !testing && !_running && _jobs.Count > 0;
+        ConvertButton.IsEnabled = !testing && !_running && !_clearing && _jobs.Count > 0;
+        RefreshActionButtons();
+        SetUpdateButtons();
+    }
+
+    private async void ScanMapClick(object sender, RoutedEventArgs e)
+    {
+        Job? job = SingleSelectedJob();
+        if (job == null || _testing || _running || _clearing)
+            return;
+        SetTesting(true);
+        try
+        {
+            SetStatus("Scanning map", "Reading the PC fastfile…");
+            var output = new List<string>();
+            var errors = new List<string>();
+            int code = await _backend.RunAsync([job.Codename, "info", job.MainFile, "--root", Settings.Workspace],
+                Settings.Workspace, line => output.Add(line), line => errors.Add(line));
+            if (code != 0)
+            {
+                MessageBox.Show(this, $"Map scan failed.\n\n{errors.LastOrDefault() ?? "the fastfile could not be read"}",
+                    "Scan map", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            string json = output.LastOrDefault(line => line.TrimStart().StartsWith("{")) ?? "";
+            using JsonDocument doc = JsonDocument.Parse(json);
+            JsonElement root = doc.RootElement;
+            string stem = Path.GetFileNameWithoutExtension(job.MainFile);
+            string folder = Path.GetDirectoryName(job.MainFile)!;
+            string sndFolder = Path.Combine(folder, "snd");
+            int soundBanks = Directory.Exists(sndFolder)
+                ? Directory.EnumerateFiles(sndFolder, stem + ".*", SearchOption.AllDirectories)
+                    .Count(f => f.EndsWith(".sabl", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".sabs", StringComparison.OrdinalIgnoreCase))
+                : 0;
+            int languageZones = Directory.EnumerateFiles(folder, "*_" + stem + ".ff").Count();
+            bool xpak = File.Exists(Path.Combine(folder, stem + ".xpak"));
+            bool outputExists = File.Exists(Path.Combine(Settings.OutputFor(job), Path.GetFileName(job.MainFile)));
+            string existingReport = Path.Combine(Workspace.ReportDirectory, stem + ".map-port.json");
+            bool cachedReport = File.Exists(existingReport);
+            var lines = new List<string>
+            {
+                $"Map: {stem}",
+                $"PC fastfile: OK · {Job.SizeText(new FileInfo(job.MainFile).Length)}",
+                $"Zone bytes: {root.GetProperty("zone_bytes").GetInt64():N0}",
+                $"Assets: {root.GetProperty("assets").GetInt32():N0}",
+                $"Language zones: {languageZones}",
+                $"Streamed XPAK: {(xpak ? "present" : "none")}",
+                $"Sound banks: {soundBanks}",
+                $"Previous report: {(cachedReport ? "available" : "none")}",
+                $"Output: {(outputExists ? "already built" : "not built")}",
+                "Smart resume: enabled; compatible caches are reused."
+            };
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Map pre-flight", MessageBoxButton.OK, MessageBoxImage.Information);
+            SetStatus("Map scan complete", $"{stem} · ready to convert");
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or JsonException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            MessageBox.Show(this, $"Map scan failed.\n\n{error.Message}", "Scan map", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            SetTesting(false);
+            RefreshActionButtons();
+        }
+    }
+
+    private async void TestOutputClick(object sender, RoutedEventArgs e)
+    {
+        Job? job = SingleSelectedJob();
+        if (job == null || _testing || _running || _clearing)
+            return;
+        string outputFolder = Settings.OutputFor(job);
+        string[] fastfiles = Directory.Exists(outputFolder)
+            ? Directory.EnumerateFiles(outputFolder, "*.ff", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileName).ToArray()
+            : [];
+        if (fastfiles.Length == 0)
+        {
+            SetStatus("No converted fastfile", "Convert the map first.");
+            return;
+        }
+        SetTesting(true);
+        int failures = 0;
+        try
+        {
+            foreach (string fastfile in fastfiles)
+            {
+                SetStatus("Testing output", Path.GetFileName(fastfile));
+                string walk = Path.Combine(Settings.Workspace, "analysis", "gui_test_walks",
+                    Path.GetFileNameWithoutExtension(fastfile) + ".ps4.t7walk");
+                Directory.CreateDirectory(Path.GetDirectoryName(walk)!);
+                int code = await _backend.RunAsync([job.Codename, "ps4-walk", fastfile, "-o", walk, "--root", Settings.Workspace],
+                    Settings.Workspace, line => Log.Append(line), line => { failures++; Log.Append(line); });
+                if (code != 0)
+                    failures++;
+            }
+            foreach (string xpak in Directory.Exists(outputFolder)
+                ? Directory.EnumerateFiles(outputFolder, "*.xpak", SearchOption.TopDirectoryOnly).OrderBy(Path.GetFileName)
+                : [])
+            {
+                SetStatus("Testing XPAK", Path.GetFileName(xpak));
+                int code = await _backend.RunAsync([job.Codename, "xpak-verify", xpak],
+                    Settings.Workspace, line => Log.Append(line), line => { failures++; Log.Append(line); });
+                if (code != 0)
+                    failures++;
+            }
+            SetStatus(failures == 0 ? "Output validation passed" : "Output validation failed",
+                failures == 0 ? $"{job.Name} · PS4 walks and XPAKs are valid" : $"{failures} test failure{(failures == 1 ? "" : "s")} · see Log");
+        }
+        finally
+        {
+            SetTesting(false);
+            RefreshActionButtons();
+        }
+    }
+
+    private void DiagnosticsClick(object sender, RoutedEventArgs e)
+    {
+        Job? job = SingleSelectedJob();
+        if (job == null || _testing || _running || _clearing)
+            return;
+        string path = Path.Combine(Workspace.ReportDirectory, job.Name + ".map-port.json");
+        if (!File.Exists(path))
+        {
+            SetStatus("No diagnostics yet", "Convert the map first.");
+            return;
+        }
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
+            JsonElement root = doc.RootElement;
+            string[] problems = root.TryGetProperty("problems", out JsonElement p) && p.ValueKind == JsonValueKind.Array
+                ? p.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
+            string[] warnings = root.TryGetProperty("warnings", out JsonElement w) && w.ValueKind == JsonValueKind.Array
+                ? w.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
+            var lines = new List<string> { $"Diagnostics: {job.Name}", "", $"Errors / problems: {problems.Length}", $"Warnings: {warnings.Length}", "" };
+            lines.AddRange(problems.Select(x => "ERROR  " + x));
+            lines.AddRange(warnings.Select(x => "WARN   " + x));
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines.Take(120)), "Map diagnostics", MessageBoxButton.OK,
+                problems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"Could not read diagnostics.\n\n{error.Message}", "Map diagnostics", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void HistoryClick(object sender, RoutedEventArgs e)
+    {
+        if (_testing) return;
+        string folder = Workspace.ReportDirectory;
+        if (!Directory.Exists(folder))
+        {
+            MessageBox.Show(this, "No conversion history has been recorded yet.", "Conversion history", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var rows = new List<string>();
+        foreach (string file in Directory.EnumerateFiles(folder, "*.fidelity.json")
+            .OrderByDescending(File.GetLastWriteTimeUtc).Take(10))
+        {
+            FidelitySnapshot? snapshot = FidelityProtocol.Load(file);
+            if (snapshot == null) continue;
+            string score = snapshot.Percent is int p ? $"{p}%" : "—";
+            rows.Add($"{File.GetLastWriteTime(file):yyyy-MM-dd HH:mm} · {snapshot.Map} · {score} · {snapshot.State}");
+        }
+        MessageBox.Show(this, rows.Count == 0 ? "No completed conversions are in the history yet." : string.Join(Environment.NewLine, rows),
+            "Conversion history · last 10", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void AddFilesClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Filter = "Fastfiles|*.ff", Multiselect = true, Title = $"Add {Edition.GameName} fastfiles" };
@@ -161,7 +349,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void JobSelectionChanged(object sender, SelectionChangedEventArgs e) => ShowPanel();
+    private void JobSelectionChanged(object sender, SelectionChangedEventArgs e) { ShowPanel(); RefreshActionButtons(); }
 
 
     private void ShowPanel()
@@ -197,9 +385,22 @@ public partial class MainWindow : Window
     }
 
 
-    private static List<string> Command(Job job, string workspace)
+    private List<string> Command(Job job, string workspace)
     {
         List<string> command = [job.Codename, "convert", job.MainFile, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
+        switch (ProfileComboBox.SelectedIndex)
+        {
+            case 1:
+                command.Add("--donor-all");
+                break;
+            case 2:
+                command.Add("--no-gsc-check");
+                command.Add("--no-shader-compile");
+                break;
+            case 3:
+                command.Add("--keep-work");
+                break;
+        }
         if (Settings.GameFolder is { Length: > 0 } game && Directory.Exists(game))
             command.AddRange([Edition.GameFolderOption, game]);
         return command;
@@ -207,9 +408,16 @@ public partial class MainWindow : Window
 
     private async void ConvertClick(object sender, RoutedEventArgs e) => await ConvertAll();
 
-    private async Task ConvertAll()
+    private async void RetryFailedClick(object sender, RoutedEventArgs e)
     {
-        if (_running || _clearing || _jobs.Count == 0)
+        Job[] failed = [.. _jobs.Where(j => j.State == RunStates.Failed)];
+        if (failed.Length > 0)
+            await ConvertAll(failed);
+    }
+
+    private async Task ConvertAll(IReadOnlyList<Job>? requested = null)
+    {
+        if (_running || _clearing || _testing || _jobs.Count == 0)
             return;
         string workspace = Settings.Workspace;
         try
@@ -222,7 +430,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        Job[] queue = [.. _jobs];
+        Job[] queue = requested == null ? [.. _jobs] : [.. requested.Where(_jobs.Contains)];
+        if (queue.Length == 0)
+            return;
+        bool retrying = requested != null;
         _stop = false;
         _count = queue.Length;
         SetBusy(true);
@@ -251,7 +462,7 @@ public partial class MainWindow : Window
                 Job job = queue[_index];
                 _current = job;
                 job.State = RunStates.Running;
-                job.StatusText = "Converting";
+                job.StatusText = retrying ? "Retrying" : "Converting";
                 job.StageText = "Starting";
                 job.Report = new FidelityView();
                 JobList.SelectedItem = job;
@@ -261,6 +472,8 @@ public partial class MainWindow : Window
                 _detail = "starting";
                 ShowProgress();
                 Log.Append($"\n[{DateTime.Now:T}] {job.GameName} {job.Kind.ToLowerInvariant()} {job.Name}: {job.MainFile}");
+                if (retrying)
+                    Log.Append("Smart resume: compatible cached stages will be reused; stale or failed work is rebuilt.");
 
                 var errors = new List<string>();
                 int code;
@@ -302,6 +515,7 @@ public partial class MainWindow : Window
             _current = null;
             SetBusy(false);
             ShowPanel();
+            RefreshActionButtons();
         }
     }
 
@@ -650,9 +864,10 @@ public partial class MainWindow : Window
 
     private void SetUpdateButtons()
     {
-        bool enabled = !_running && !_clearing && !_updating;
+        bool enabled = !_running && !_clearing && !_updating && !_testing;
         CheckVersionButton.IsEnabled = enabled;
         UpdateToolButton.IsEnabled = enabled;
+        RefreshActionButtons();
     }
 
     private void CancelClick(object sender, RoutedEventArgs e) => StopRun();

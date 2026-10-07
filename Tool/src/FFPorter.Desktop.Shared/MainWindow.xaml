@@ -268,6 +268,29 @@
           <ToggleButton x:Name="LogToggle" Style="{StaticResource Toggle.Ghost}" Checked="LogToggled" Unchecked="LogToggled" ToolTip="Show everything the converter printed">
             <StackPanel Orientation="Horizontal"><TextBlock Style="{StaticResource Text.Icon}" Text="&#xE756;" Margin="0,0,8,0"/><TextBlock Text="Log"/></StackPanel>
           </ToggleButton>
+          <TextBlock Text="Profile" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="10,0,5,0"/>
+          <ComboBox x:Name="ProfileComboBox" Width="150" Height="30" VerticalAlignment="Center" SelectedIndex="0"
+                    ToolTip="Standard is recommended. Maximum Compatibility enables donor fallback. Fast skips shader/script checks. Debug keeps more work files.">
+            <ComboBoxItem Content="Standard"/>
+            <ComboBoxItem Content="Maximum Compatibility"/>
+            <ComboBoxItem Content="Fast"/>
+            <ComboBoxItem Content="Debug"/>
+          </ComboBox>
+          <Button x:Name="ScanMapButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="12,6" Click="ScanMapClick" ToolTip="Scan the selected map before converting">
+            <TextBlock Text="SCAN MAP" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
+          <Button x:Name="RetryFailedButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="12,6" Click="RetryFailedClick" ToolTip="Retry failed maps and reuse compatible cached stages">
+            <TextBlock Text="RETRY FAILED" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
+          <Button x:Name="TestOutputButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="12,6" Click="TestOutputClick" ToolTip="Run PS4 loader walks and XPAK verification on the selected converted output">
+            <TextBlock Text="TEST OUTPUT" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
+          <Button x:Name="DiagnosticsButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="12,6" Click="DiagnosticsClick" ToolTip="Show the selected conversion's problems and warnings">
+            <TextBlock Text="DIAGNOSTICS" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
+          <Button x:Name="HistoryButton" Style="{StaticResource Button.Ghost}" Margin="6,0,0,0" Padding="12,6" Click="HistoryClick" ToolTip="Show recent conversion history">
+            <TextBlock Text="HISTORY" FontSize="11.5" FontWeight="SemiBold"/>
+          </Button>
           <Button x:Name="CheckVersionButton" Style="{StaticResource Button.Ghost}" Margin="10,0,0,0" Padding="14,6" Click="CheckVersionClick" ToolTip="Check the installed Fork version against GitHub">
             <TextBlock Text="CHECK VERSION" FontSize="11.5" FontWeight="SemiBold"/>
           </Button>
