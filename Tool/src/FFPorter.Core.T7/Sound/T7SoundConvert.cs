@@ -7,7 +7,7 @@ public static class T7SoundConvert
 {
     public const int FrameSamples = 1152;
     public const int OutputRate = 48000;
-    public const string RulesVersion = "t7-sound-4";
+    public const string RulesVersion = "t7-sound-5";
 
     public sealed record Result(T7SoundBank Bank, Dictionary<string, string> RenamedAssets, List<string> Notes)
     {
@@ -170,7 +170,7 @@ public static class T7SoundConvert
 
     private static byte[] EncodeEntry(T7SoundBank.Entry entry, Workspace workspace, SndFile sndfile, Lame lame, List<string> notes, out bool resampled, out bool retimed, out bool silent)
     {
-        (short[] pcm, int channels, int rate) = DecodeFlac(entry.Data, workspace, sndfile);
+        (short[] pcm, int channels, int rate) = DecodeFlac(entry, workspace, sndfile);
         resampled = false;
         retimed = false;
         silent = channels <= 0 || pcm.Length < channels;
@@ -229,15 +229,18 @@ public static class T7SoundConvert
         }
     }
 
-    private static (short[] Pcm, int Channels, int Rate) DecodeFlac(byte[] flac, Workspace workspace, SndFile sndfile)
+    private static (short[] Pcm, int Channels, int Rate) DecodeFlac(
+        T7SoundBank.Entry entry, Workspace workspace, SndFile sndfile)
     {
+        byte[] flac = PrepareFlacPayload(entry);
         string path = SndFile.Temporary(workspace, ".flac", flac);
         try
         {
             var info = new SfInfo();
             nint handle = sndfile.Open(path, SndFile.ModeRead, ref info);
             if (handle == 0)
-                throw new InvalidDataException($"libsndfile could not open the FLAC payload at {path}: {sndfile.ErrorText(0)}");
+                throw new InvalidDataException(
+                    $"libsndfile could not open the FLAC payload at {path}: {sndfile.ErrorText(0)}");
             try
             {
                 int channels = info.Channels;
@@ -276,6 +279,80 @@ public static class T7SoundConvert
         {
             SndFile.Delete(path);
         }
+    }
+
+    private static byte[] PrepareFlacPayload(T7SoundBank.Entry entry)
+    {
+        ReadOnlySpan<byte> payload = entry.Data;
+        if (payload.Length == 0)
+            return [];
+
+        // T7 banks can contain either a complete FLAC stream or a headerless
+        // FLAC frame payload. Complete streams are already usable by libsndfile.
+        if (payload.Length >= 4 && payload[..4].SequenceEqual("fLaC"u8))
+            return payload.ToArray();
+
+        // The headerless form can contain engine-specific bytes before the first
+        // FLAC frame. The established T7 readers locate the first FF F8 sync word.
+        int frameStart = -1;
+        for (int i = 0; i + 1 < payload.Length; i++)
+        {
+            if (payload[i] == 0xFF && payload[i + 1] == 0xF8)
+            {
+                frameStart = i;
+                break;
+            }
+        }
+
+        if (frameStart < 0)
+        {
+            throw new InvalidDataException(
+                $"sound '{Describe(entry)}' is marked FLAC but contains neither a complete FLAC header nor a FLAC frame sync (FF F8)");
+        }
+
+        int sampleRate = entry.SampleRate;
+        int channels = Math.Max(1, (int)entry.Channels);
+        long sampleCount = entry.FrameCount;
+
+        if (sampleRate <= 0)
+            throw new InvalidDataException(
+                $"sound '{Describe(entry)}' has invalid sample rate {sampleRate}");
+        if (sampleCount < 0 || sampleCount > 0xFFFFFFFFFL)
+            throw new InvalidDataException(
+                $"sound '{Describe(entry)}' has sample count {sampleCount}, outside FLAC's 36-bit STREAMINFO range");
+
+        // Standard FLAC marker + one final STREAMINFO metadata block.
+        // T7 source entries are 16-bit FLAC; FrameCount is samples/channel.
+        byte[] header = new byte[42];
+        "fLaC"u8.CopyTo(header);
+        header[4] = 0x80; // last metadata block + STREAMINFO
+        header[5] = 0x00;
+        header[6] = 0x00;
+        header[7] = 0x22; // 34-byte STREAMINFO payload
+
+        WriteUInt16BigEndian(header, 8, 0x0400);  // minimum block size
+        WriteUInt16BigEndian(header, 10, 0x0400); // maximum block size
+        // 12..17: minimum/maximum frame sizes unknown, left as zero.
+
+        ulong streamInfo = ((ulong)sampleRate << 44)
+            | ((ulong)(channels - 1) << 41)
+            | ((ulong)15 << 36)
+            | (ulong)sampleCount;
+
+        for (int i = 0; i < 8; i++)
+            header[18 + i] = (byte)(streamInfo >> (56 - 8 * i));
+
+        // 26..41: STREAMINFO MD5 signature intentionally left zero.
+        byte[] result = new byte[header.Length + payload.Length - frameStart];
+        header.CopyTo(result, 0);
+        payload[frameStart..].CopyTo(result.AsSpan(header.Length));
+        return result;
+    }
+
+    private static void WriteUInt16BigEndian(byte[] buffer, int offset, ushort value)
+    {
+        buffer[offset] = (byte)(value >> 8);
+        buffer[offset + 1] = (byte)value;
     }
 
     public static short[] ResamplePeriodic(short[] pcm, int channels, int targetFrames, bool periodic)
