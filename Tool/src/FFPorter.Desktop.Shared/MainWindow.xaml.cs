@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.1.0";
+    private const string ForkVersion = "Fork 1.2.1.1";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -945,6 +945,7 @@ public partial class MainWindow : Window
 
     private async void PrepareTools()
     {
+        bool showOverlay = Settings.FirstRun;
         Task work = Task.Run(() =>
         {
             Ps4Sdk.EnsureFiles();
@@ -957,7 +958,7 @@ public partial class MainWindow : Window
                 PrepareDetail.Text = line;
             }));
         });
-        if (_firstRun || await Task.WhenAny(work, Task.Delay(400)) != work)
+        if (showOverlay)
             PrepareOverlay.Visibility = Visibility.Visible;
         try
         {
@@ -967,7 +968,12 @@ public partial class MainWindow : Window
         {
             Log.Append($"Preparing files failed: {error.Message}");
         }
-        PrepareOverlay.Visibility = Visibility.Collapsed;
+        finally
+        {
+            PrepareOverlay.Visibility = Visibility.Collapsed;
+            RefreshQueue();
+            RefreshActionButtons();
+        }
     }
 
     private void ChooseGameFolderClick(object sender, RoutedEventArgs e) => ChooseGameFolder();

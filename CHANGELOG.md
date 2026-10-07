@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.1
+- Fixed existing installs being blocked by the full-window preparation overlay during startup.
+- The preparation overlay now appears only on the first setup run and always clears in a finally block.
+
 ## Fork 1.2.1.0
 - Fixed the updater flow so the restart prompt appears only after the new EXE is fully downloaded and SHA-256 verified.
 - The confirmed restart now closes the app, replaces the old EXE in its original directory, and launches the new build.
