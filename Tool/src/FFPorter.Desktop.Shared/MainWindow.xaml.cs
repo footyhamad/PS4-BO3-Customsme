@@ -2,6 +2,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -28,6 +31,13 @@ public partial class MainWindow : Window
     private int _index, _count;
     private DateTime _started;
     private string _stage = "", _detail = "";
+    private bool _updating;
+
+    private const string ForkVersion = "Fork 1.00";
+    private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
+    private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
+    private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
+    private static readonly HttpClient UpdateClient = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     private static AppSettings Settings => AppSettings.Current;
     private static Edition Edition => Edition.Current;
@@ -35,8 +45,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Title = TitleText.Text = Edition.Title;
-        SubtitleText.Text = Edition.Subtitle;
+        Title = TitleText.Text = $"{Edition.Title} · {ForkVersion}";
+        SubtitleText.Text = $"{Edition.Subtitle} · {ForkVersion}";
         EmptyQueueText.Text = $"Maps, mods, weapons and zones from {Edition.GameName}: .ff files or whole folders.";
         ThemeManager.StyleTitleBar(this);
         JobList.ItemsSource = _jobs;
@@ -367,9 +377,231 @@ public partial class MainWindow : Window
         _running = busy;
         AddFilesButton.IsEnabled = AddFolderButton.IsEnabled = OutputButton.IsEnabled = GameFolderButton.IsEnabled = ClearCacheButton.IsEnabled = !busy;
         RemoveButton.IsEnabled = ClearButton.IsEnabled = !busy && _jobs.Count > 0;
+        SetUpdateButtons();
         ConvertButton.IsEnabled = !busy && _jobs.Count > 0;
         ConvertButton.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
         CancelButton.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void CheckVersionClick(object sender, RoutedEventArgs e)
+    {
+        if (_running || _clearing || _updating)
+            return;
+        _updating = true;
+        SetUpdateButtons();
+        try
+        {
+            string? remote = await ReadRemoteForkVersion();
+            if (remote == null)
+            {
+                MessageBox.Show(this, "GitHub did not return a valid fork version.", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            bool current = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase);
+            string status = current
+                ? $"You are up to date.
+
+Installed: {ForkVersion}
+GitHub: {remote}"
+                : $"A newer fork build is available.
+
+Installed: {ForkVersion}
+GitHub: {remote}
+
+Use UPDATE TOOL to install it.";
+
+            MessageBox.Show(this, status, "Porter version", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception error) when (error is HttpRequestException or IOException or TaskCanceledException)
+        {
+            MessageBox.Show(this, $"Could not reach the fork update service.
+
+{error.Message}", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _updating = false;
+            SetUpdateButtons();
+        }
+    }
+
+    private async void UpdateToolClick(object sender, RoutedEventArgs e)
+    {
+        if (_running || _clearing || _updating)
+            return;
+        _updating = true;
+        SetUpdateButtons();
+        string? tempExe = null;
+        try
+        {
+            string? remote = await ReadRemoteForkVersion();
+            if (remote == null)
+            {
+                MessageBox.Show(this, "GitHub did not return a valid fork version.", "Update tool", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(this, $"Already up to date.
+
+Installed: {ForkVersion}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            MessageBoxResult answer = MessageBox.Show(
+                this,
+                $"Update Porter from {ForkVersion} to {remote}?
+
+The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
+                "Update tool",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (answer != MessageBoxResult.Yes)
+                return;
+
+            string exePath = Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName
+                ?? throw new InvalidOperationException("Could not determine the running Porter executable path.");
+
+            tempExe = Path.Combine(Path.GetTempPath(), $"PS4.FF.Porter-update-{Guid.NewGuid():N}.exe");
+            string tempHash = tempExe + ".sha256";
+
+            SetStatus("Updating the tool", $"Downloading {remote}");
+            await DownloadFile(ForkExeUrl, tempExe);
+            await DownloadFile(ForkHashUrl, tempHash);
+
+            FileInfo downloaded = new(tempExe);
+            if (downloaded.Length < 1024 * 1024)
+                throw new InvalidDataException("The downloaded Porter executable is unexpectedly small.");
+
+            await using (FileStream probe = File.OpenRead(tempExe))
+            {
+                int m = probe.ReadByte();
+                int z = probe.ReadByte();
+                if (m != 'M' || z != 'Z')
+                    throw new InvalidDataException("The downloaded file is not a Windows executable.");
+            }
+
+            string expectedHash = ParseSha256(File.ReadAllText(tempHash));
+            string actualHash = await ComputeSha256(tempExe);
+            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"SHA-256 mismatch. Expected {expectedHash}, got {actualHash}.");
+
+            try { File.Delete(tempHash); } catch { }
+
+            string script = $"""
+$ErrorActionPreference = 'Stop'
+$target = {PsQuote(exePath)}
+$temp = {PsQuote(tempExe)}
+$targetPid = {Environment.ProcessId}
+
+for ($i = 0; $i -lt 120; $i++) {{
+    if ($null -eq (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) {{ break }}
+    Start-Sleep -Milliseconds 250
+}}
+
+for ($i = 0; $i -lt 40; $i++) {{
+    try {{
+        [System.IO.File]::Move($temp, $target, $true)
+        Start-Process -FilePath $target
+        exit 0
+    }}
+    catch {{
+        Start-Sleep -Milliseconds 500
+    }}
+}}
+
+if (Test-Path -LiteralPath $temp) {{
+    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+}}
+""";
+
+            string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+
+            Application.Current.Shutdown();
+            tempExe = null;
+        }
+        catch (Exception error) when (error is HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or TaskCanceledException)
+        {
+            MessageBox.Show(this, $"Update failed.
+
+{error.Message}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (tempExe != null)
+            {
+                try { File.Delete(tempExe); } catch { }
+                try { File.Delete(tempExe + ".sha256"); } catch { }
+            }
+            _updating = false;
+            SetUpdateButtons();
+        }
+    }
+
+    private static async Task<string?> ReadRemoteForkVersion()
+    {
+        using HttpResponseMessage response = await UpdateClient.GetAsync(ForkVersionUrl, HttpCompletionOption.ResponseHeadersRead);
+        if (!response.IsSuccessStatusCode)
+            return null;
+        string version = (await response.Content.ReadAsStringAsync()).Trim();
+        return version.StartsWith("Fork ", StringComparison.OrdinalIgnoreCase) ? version : null;
+    }
+
+    private static async Task DownloadFile(string url, string path)
+    {
+        using HttpResponseMessage response = await UpdateClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        await using Stream input = await response.Content.ReadAsStreamAsync();
+        await using FileStream output = new(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        await input.CopyToAsync(output);
+    }
+
+    private static async Task<string> ComputeSha256(string path)
+    {
+        await using FileStream stream = File.OpenRead(path);
+        byte[] hash = await SHA256.HashDataAsync(stream);
+        return Convert.ToHexString(hash);
+    }
+
+    private static string ParseSha256(string text)
+    {
+        foreach (string token in text.Split([' ', '	', '', '
+'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.Length != 64)
+                continue;
+            bool hex = true;
+            foreach (char ch in token)
+            {
+                if (!Uri.IsHexDigit(ch))
+                {
+                    hex = false;
+                    break;
+                }
+            }
+            if (hex)
+                return token.ToUpperInvariant();
+        }
+        throw new InvalidDataException("The release checksum file did not contain a valid SHA-256 hash.");
+    }
+
+    private static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    private void SetUpdateButtons()
+    {
+        bool enabled = !_running && !_clearing && !_updating;
+        CheckVersionButton.IsEnabled = enabled;
+        UpdateToolButton.IsEnabled = enabled;
     }
 
     private void CancelClick(object sender, RoutedEventArgs e) => StopRun();
@@ -588,6 +820,7 @@ public partial class MainWindow : Window
         _clearing = clearing;
         ClearCacheButton.IsEnabled = !clearing;
         ConvertButton.IsEnabled = !clearing && _jobs.Count > 0;
+        SetUpdateButtons();
     }
 
     private static long FolderSize(string folder)
