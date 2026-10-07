@@ -1,6 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
-## Fork 1.2.1.3
+## Fork 1.2.1.4
+- Fixed rolling-release publishing so an existing fork-latest release is edited instead of incorrectly attempting to recreate it.
+- Release publishing now checks native GitHub CLI exit codes and fails the build when release metadata or asset upload fails.
+
 - Added visible updater progress to version checks as well as downloads, verification and restart preparation.
 - Corrected the changelog structure from 1.2.1.2.
 

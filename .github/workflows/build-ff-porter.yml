@@ -66,10 +66,20 @@ jobs:
           git push origin refs/tags/fork-latest --force
 
           $version = (Get-Content "${{ github.workspace }}\Tool\FORK_VERSION.txt" -Raw).Trim()
-          if (gh release view fork-latest *> $null) {
+
+          gh release view fork-latest *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
             gh release edit fork-latest --title "PS4 FF Porter $version" --notes "Rolling build of the FF Porter fork." --latest=false
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update the fork-latest release metadata."
+            }
           } else {
             gh release create fork-latest --title "PS4 FF Porter $version" --notes "Rolling build of the FF Porter fork." --latest=false
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create the fork-latest release."
+            }
           }
 
           gh release upload fork-latest `
@@ -77,3 +87,6 @@ jobs:
             "${{ github.workspace }}\dist\PS4.FF.Porter.exe.sha256" `
             "${{ github.workspace }}\dist\FORK_VERSION.txt" `
             --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to upload the rolling fork release assets."
+          }
