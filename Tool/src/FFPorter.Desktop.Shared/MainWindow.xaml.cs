@@ -392,22 +392,27 @@ public partial class MainWindow : Window
         try
         {
             string? remote = await ReadRemoteForkVersion();
-            if (remote == null)
+            string? remoteHash = await ReadRemoteForkHash();
+            string exePath = GetCurrentExePath();
+            string localHash = await ComputeSha256(exePath);
+
+            if (remote == null || remoteHash == null)
             {
-                MessageBox.Show(this, "GitHub did not return a valid fork version.", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "GitHub did not return a valid fork version/build.", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            bool current = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase);
+            bool current = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(localHash, remoteHash, StringComparison.OrdinalIgnoreCase);
             string status = current
-                ? $"You are up to date.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}{Environment.NewLine}GitHub: {remote}"
-                : $"A newer fork build is available.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}{Environment.NewLine}GitHub: {remote}{Environment.NewLine}{Environment.NewLine}Use UPDATE TOOL to install it.";
+                ? $"You are up to date.{Environment.NewLine}{Environment.NewLine}Version: {ForkVersion}{Environment.NewLine}Build: {localHash[..12]}"
+                : $"A newer fork build is available.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion} · {localHash[..12]}{Environment.NewLine}GitHub: {remote} · {remoteHash[..12]}{Environment.NewLine}{Environment.NewLine}Use UPDATE TOOL to install it.";
 
             MessageBox.Show(this, status, "Porter version", MessageBoxButton.OK, MessageBoxImage.Information);
         }
-        catch (Exception error) when (error is HttpRequestException or IOException or TaskCanceledException)
+        catch (Exception error) when (error is HttpRequestException or IOException or TaskCanceledException or UnauthorizedAccessException)
         {
-            MessageBox.Show(this, $"Could not reach the fork update service.{Environment.NewLine}{Environment.NewLine}{error.Message}", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, $"Could not check the fork build.{Environment.NewLine}{Environment.NewLine}{error.Message}", "Check version", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -426,30 +431,34 @@ public partial class MainWindow : Window
         try
         {
             string? remote = await ReadRemoteForkVersion();
-            if (remote == null)
+            string? remoteHash = await ReadRemoteForkHash();
+            if (remote == null || remoteHash == null)
             {
-                MessageBox.Show(this, "GitHub did not return a valid fork version.", "Update tool", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "GitHub did not return a valid fork version/build.", "Update tool", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            if (string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase))
+            string exePath = GetCurrentExePath();
+            string localHash = await ComputeSha256(exePath);
+            bool sameBuild = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(localHash, remoteHash, StringComparison.OrdinalIgnoreCase);
+            if (sameBuild)
             {
                 MessageBox.Show(this, $"Already up to date.{Environment.NewLine}{Environment.NewLine}Installed: {ForkVersion}", "Update tool", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
+            string change = string.Equals(remote, ForkVersion, StringComparison.OrdinalIgnoreCase)
+                ? $"install the latest {remote} build"
+                : $"update Porter from {ForkVersion} to {remote}";
             MessageBoxResult answer = MessageBox.Show(
                 this,
-                $"Update Porter from {ForkVersion} to {remote}?{Environment.NewLine}{Environment.NewLine}The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
+                $"Do you want to {change}?{Environment.NewLine}{Environment.NewLine}The new EXE will be downloaded from your GitHub fork, verified with its SHA-256 checksum, then installed after this window closes.",
                 "Update tool",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
             if (answer != MessageBoxResult.Yes)
                 return;
-
-            string exePath = Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName
-                ?? throw new InvalidOperationException("Could not determine the running Porter executable path.");
 
             tempExe = Path.Combine(Path.GetTempPath(), $"PS4.FF.Porter-update-{Guid.NewGuid():N}.exe");
             string tempHash = tempExe + ".sha256";
@@ -530,6 +539,19 @@ if (Test-Path -LiteralPath $temp) {{
             _updating = false;
             SetUpdateButtons();
         }
+    }
+
+    private static string GetCurrentExePath() =>
+        Environment.ProcessPath
+        ?? Process.GetCurrentProcess().MainModule?.FileName
+        ?? throw new InvalidOperationException("Could not determine the running Porter executable path.");
+
+    private static async Task<string?> ReadRemoteForkHash()
+    {
+        using HttpResponseMessage response = await UpdateClient.GetAsync(ForkHashUrl, HttpCompletionOption.ResponseHeadersRead);
+        if (!response.IsSuccessStatusCode)
+            return null;
+        return ParseSha256(await response.Content.ReadAsStringAsync());
     }
 
     private static async Task<string?> ReadRemoteForkVersion()
