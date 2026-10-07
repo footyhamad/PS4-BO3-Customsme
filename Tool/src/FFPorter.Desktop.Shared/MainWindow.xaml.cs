@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.1.1";
+    private const string ForkVersion = "Fork 1.2.1.2";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -600,6 +600,13 @@ public partial class MainWindow : Window
         Progress.Value = progress ?? 0;
         PercentText.Text = progress.HasValue ? $"{progress.Value:P0}" : "Working…";
         Progress.Visibility = Visibility.Visible;
+
+        UpdateTitle.Text = status;
+        UpdateDetail.Text = detail;
+        UpdateProgress.IsIndeterminate = !progress.HasValue;
+        UpdateProgress.Value = progress ?? 0;
+        UpdatePercent.Text = progress.HasValue ? $"{progress.Value:P0}" : "Working…";
+        UpdateOverlay.Visibility = Visibility.Visible;
     }
 
     private void ResetUpdateProgress()
@@ -608,6 +615,12 @@ public partial class MainWindow : Window
         Progress.Value = 0;
         Progress.Visibility = Visibility.Hidden;
         PercentText.Text = "";
+
+        UpdateProgress.IsIndeterminate = false;
+        UpdateProgress.Value = 0;
+        UpdatePercent.Text = "";
+        UpdateDetail.Text = "";
+        UpdateOverlay.Visibility = Visibility.Collapsed;
     }
 
     private void SetBusy(bool busy)

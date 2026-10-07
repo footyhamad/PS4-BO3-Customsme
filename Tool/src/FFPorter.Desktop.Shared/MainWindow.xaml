@@ -311,6 +311,22 @@
       </Grid>
     </Border>
 
+    <Grid x:Name="UpdateOverlay" Grid.RowSpan="4" Margin="-28,-20,-28,-20" Background="{DynamicResource Bg.Overlay}" Panel.ZIndex="20" Visibility="Collapsed">
+      <Border Style="{StaticResource Card}" Width="520" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="24,22">
+        <StackPanel>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Style="{StaticResource Text.Icon}" Text="&#xE777;" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <TextBlock x:Name="UpdateTitle" Text="Updating Porter" Style="{StaticResource Text.Heading}" FontSize="15"/>
+            <TextBlock x:Name="UpdatePercent" Style="{StaticResource Text.Caption}" Margin="10,2,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock x:Name="UpdateDetail" Style="{StaticResource Text.Body}" TextWrapping="Wrap" Margin="0,10,0,0"
+                     Text="Preparing the update…"/>
+          <ProgressBar x:Name="UpdateProgress" Margin="0,16,0,0"/>
+          <TextBlock Style="{StaticResource Text.Caption}" Text="The app will stay open until the download and verification are complete." TextWrapping="Wrap" Margin="0,10,0,0"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+
     <Grid x:Name="PrepareOverlay" Grid.RowSpan="4" Margin="-28,-20,-28,-20" Background="{DynamicResource Bg.Overlay}" Panel.ZIndex="10" Visibility="Collapsed">
       <Border Style="{StaticResource Card}" Width="420" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="24,22">
         <StackPanel>
