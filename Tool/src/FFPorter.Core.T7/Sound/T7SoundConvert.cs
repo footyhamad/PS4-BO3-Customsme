@@ -170,16 +170,60 @@ public static class T7SoundConvert
 
     private static byte[] EncodeEntry(T7SoundBank.Entry entry, Workspace workspace, SndFile sndfile, Lame lame, List<string> notes, out bool resampled, out bool retimed, out bool silent)
     {
-        (short[] pcm, int channels, int rate) = DecodeFlac(entry, workspace, sndfile);
         resampled = false;
         retimed = false;
-        silent = channels <= 0 || pcm.Length < channels;
-        if (silent)
+        silent = false;
+
+        try
         {
+            (short[] pcm, int channels, int rate) = DecodeFlac(entry, workspace, sndfile);
+            silent = channels <= 0 || pcm.Length < channels;
+            if (silent)
+            {
+                int silentChannels = Math.Max(1, (int)entry.Channels);
+                notes.Add($"'{Describe(entry)}' decodes to no audio, so it plays as silence");
+                return lame.Encode(new short[FrameSamples * silentChannels], silentChannels, OutputRate);
+            }
+            if (channels != entry.Channels)
+                throw new InvalidDataException($"sound '{Describe(entry)}' decodes to {channels} channels, the entry says {entry.Channels}");
+            int frames = pcm.Length / channels;
+            resampled = rate != OutputRate;
+            if (rate != OutputRate)
+            {
+                pcm = ResamplePeriodic(pcm, channels, Math.Max(1, (int)Math.Round((double)frames * OutputRate / rate)), periodic: entry.Looping != 0);
+                notes.Add($"resampled '{entry.Name}' from {rate} Hz");
+                frames = pcm.Length / channels;
+            }
+            if (entry.Looping == 0)
+                return lame.Encode(pcm, channels, OutputRate);
+
+            int loopFrames = Math.Max(1, (int)Math.Round((double)frames / FrameSamples));
+            int loopLength = loopFrames * FrameSamples;
+            retimed = loopLength != frames;
+            short[] loop = loopLength == frames ? pcm : ResamplePeriodic(pcm, channels, loopLength, periodic: true);
+            var feed = new short[(576 + loopLength + 2304) * channels];
+            CopyPeriodic(loop, channels, loopLength - 576, 576, feed);
+            loop.AsSpan(0, loopLength * channels).CopyTo(feed.AsSpan(576 * channels));
+            CopyPeriodic(loop, channels, 0, 2304, feed.AsSpan((576 + loopLength) * channels));
+            byte[] encoded = lame.Encode(feed, channels, OutputRate);
+            List<(int Offset, int Length)> mp3Frames = Mp3Frames(encoded);
+            if (mp3Frames.Count < loopFrames + 2)
+                throw new InvalidDataException($"loop '{entry.Name}' encoded to {mp3Frames.Count} frames, {loopFrames + 2} needed");
+            int start = mp3Frames[1].Offset;
+            int end = mp3Frames[loopFrames + 1].Offset;
+            return encoded.AsSpan(start, end - start).ToArray();
+        }
+        catch (InvalidDataException error) when (entry.Format == T7SoundBank.FormatFlac)
+        {
+            // Some T7 entries are flagged as FLAC but contain proprietary/corrupt
+            // payloads that cannot be decoded by libsndfile. A bad sound must not
+            // fail the entire map: replace only this entry with valid MP3 silence.
             int silentChannels = Math.Max(1, (int)entry.Channels);
-            notes.Add($"'{Describe(entry)}' decodes to no audio, so it plays as silence");
+            notes.Add($"silenced '{Describe(entry)}': {error.Message}");
+            silent = true;
             return lame.Encode(new short[FrameSamples * silentChannels], silentChannels, OutputRate);
         }
+    }
         if (channels != entry.Channels)
             throw new InvalidDataException($"sound '{Describe(entry)}' decodes to {channels} channels, the entry says {entry.Channels}");
         int frames = pcm.Length / channels;
