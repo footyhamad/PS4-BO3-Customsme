@@ -9,14 +9,14 @@
     <RootNamespace>FFPorter.Desktop</RootNamespace>
     <StartupObject>FFPorter.Desktop.Program</StartupObject>
     <CETCompat>false</CETCompat>
-    <Version>1.2.0</Version>
-    <AssemblyVersion>1.2.0.1</AssemblyVersion>
-    <FileVersion>1.2.0.1</FileVersion>
-    <InformationalVersion>Fork 1.2.0.1</InformationalVersion>
+    <Version>1.2.0.2</Version>
+    <AssemblyVersion>1.2.0.2</AssemblyVersion>
+    <FileVersion>1.2.0.2</FileVersion>
+    <InformationalVersion>Fork 1.2.0.2</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..FFPorter.Desktop.SharedFFPorter.Desktop.Shared.csproj" />
-    <ProjectReference Include="..FFPorter.Cli.T7FFPorter.Cli.T7.csproj" />
+    <ProjectReference Include="..\FFPorter.Desktop.Shared\FFPorter.Desktop.Shared.csproj" />
+    <ProjectReference Include="..\FFPorter.Cli.T7\FFPorter.Cli.T7.csproj" />
   </ItemGroup>
 </Project>
