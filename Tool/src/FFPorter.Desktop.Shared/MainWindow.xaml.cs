@@ -486,32 +486,33 @@ public partial class MainWindow : Window
 
             try { File.Delete(tempHash); } catch { }
 
-            string script = $"""
-$ErrorActionPreference = 'Stop'
-$target = {PsQuote(exePath)}
-$temp = {PsQuote(tempExe)}
-$targetPid = {Environment.ProcessId}
-
-for ($i = 0; $i -lt 120; $i++) {{
-    if ($null -eq (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) {{ break }}
-    Start-Sleep -Milliseconds 250
-}}
-
-for ($i = 0; $i -lt 40; $i++) {{
-    try {{
-        [System.IO.File]::Move($temp, $target, $true)
-        Start-Process -FilePath $target
-        exit 0
-    }}
-    catch {{
-        Start-Sleep -Milliseconds 500
-    }}
-}}
-
-if (Test-Path -LiteralPath $temp) {{
-    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
-}}
-""";
+            string script = string.Join(Environment.NewLine, new[]
+            {
+                "$ErrorActionPreference = 'Stop'",
+                "$target = " + PsQuote(exePath),
+                "$temp = " + PsQuote(tempExe),
+                "$targetPid = " + Environment.ProcessId,
+                "",
+                "for ($i = 0; $i -lt 120; $i++) {",
+                "    if ($null -eq (Get-Process -Id $targetPid -ErrorAction SilentlyContinue)) { break }",
+                "    Start-Sleep -Milliseconds 250",
+                "}",
+                "",
+                "for ($i = 0; $i -lt 40; $i++) {",
+                "    try {",
+                "        [System.IO.File]::Move($temp, $target, $true)",
+                "        Start-Process -FilePath $target",
+                "        exit 0",
+                "    }",
+                "    catch {",
+                "        Start-Sleep -Milliseconds 500",
+                "    }",
+                "}",
+                "",
+                "if (Test-Path -LiteralPath $temp) {",
+                "    Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue",
+                "}",
+            });
 
             string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
             Process.Start(new ProcessStartInfo
