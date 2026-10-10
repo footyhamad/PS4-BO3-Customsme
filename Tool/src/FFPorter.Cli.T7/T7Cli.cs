@@ -203,7 +203,13 @@ public static class T7Cli
             ? Path.GetFileName(Path.TrimEndingDirectorySeparator(input))
             : Path.GetFileNameWithoutExtension(input);
         string folder = modPackage ? input : Path.GetDirectoryName(input)!;
-        string work = Path.Combine(T7Paths.Work(workspace), modPackage ? "mod-" + stem : stem);
+        string workName = stem;
+        if (modPackage)
+        {
+            byte[] packagePathHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+            workName = $"mod-{stem}-{System.Convert.ToHexString(packagePathHash)[..12].ToLowerInvariant()}";
+        }
+        string work = Path.Combine(T7Paths.Work(workspace), workName);
         string loader = T7Paths.Ps4Loader(workspace);
         string image = options.Value("--image") ?? T7Paths.PcImage(workspace);
         if (!File.Exists(image) && !File.Exists(Path.Combine(image, "segments.json")))

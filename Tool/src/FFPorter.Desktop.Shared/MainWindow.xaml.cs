@@ -340,7 +340,7 @@ public partial class MainWindow : Window
                     continue;
                 }
 
-                List<Job> scanned = JobScanner.Scan([full], Log.Append);
+                List<Job> scanned = JobScanner.ScanPackage(full, Log.Append);
                 if (scanned.Count == 0)
                 {
                     Log.Append($"Skipped mod package '{full}': no readable PC BO3 fastfiles were accepted.");
