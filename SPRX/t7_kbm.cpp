@@ -2165,9 +2165,11 @@ void T7Kbm_Install(uintptr_t base)
         (void*)InputFrame, &g_frameOriginal, "KBM.InputFrame") != nullptr && g_frameOriginal != nullptr;
     const bool cmdHook = Detour_Attach(&g_cmdDetour, (uint64_t)(base + kCreateCmd),
         (void*)CreateCmd, &g_cmdOriginal, "KBM.CreateCmd") != nullptr && g_cmdOriginal != nullptr;
-    BO3Diag_Log((imeHook && frameHook && cmdHook) ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM",
-        "core hooks IME=%s InputFrame=%s CreateCmd=%s",
-        imeHook ? "OK" : "FAILED", frameHook ? "OK" : "FAILED", cmdHook ? "OK" : "FAILED");
-    if (!(imeHook && frameHook && cmdHook))
+    installed = imeHook && frameHook && cmdHook;
+    BO3Diag_Log(installed ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM",
+        "core hooks IME=%s InputFrame=%s CreateCmd=%s installer_state=%s",
+        imeHook ? "OK" : "FAILED", frameHook ? "OK" : "FAILED", cmdHook ? "OK" : "FAILED",
+        installed ? "installed" : "partial/retryable");
+    if (!installed)
         BO3Diag_Log(BO3_DIAG_WARN, "KBM", "partial KB/M setup; inspect the DETOUR errors immediately above");
 }
