@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using Microsoft.Win32;
 
 namespace FFPorter.Desktop;
@@ -11,6 +14,7 @@ internal sealed class ModLoaderWindow : Window
     private readonly ObservableCollection<ModCandidate> _mods = [];
     private readonly DataGrid _grid;
     private readonly TextBlock _status;
+    private readonly TextBox _details;
     private readonly Action<IEnumerable<string>> _queuePaths;
     private readonly Action<string> _log;
     private string? _root;
@@ -21,15 +25,15 @@ internal sealed class ModLoaderWindow : Window
         _queuePaths = queuePaths;
         _log = log;
 
-        Title = "PC Mod Loader · Discovery";
-        Width = 1000;
-        Height = 620;
-        MinWidth = 760;
-        MinHeight = 440;
+        Title = "PC Mod Loader";
+        Width = 1180;
+        Height = 720;
+        MinWidth = 900;
+        MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         var layout = new DockPanel { Margin = new Thickness(18) };
-        var header = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 0, 12) };
+        var header = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
         header.Children.Add(new TextBlock
         {
             Text = "Mod Loader",
@@ -38,17 +42,17 @@ internal sealed class ModLoaderWindow : Window
         });
         header.Children.Add(new TextBlock
         {
-            Text = "Discover PC BO3 mod/map folders, then queue their files for the existing conversion pipeline.",
+            Text = "Scan PC BO3 mods and usermaps, inspect their files and dependencies, then queue candidate fastfiles for the existing PS4 conversion pipeline.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 0, 0)
         });
         DockPanel.SetDock(header, Dock.Top);
         layout.Children.Add(header);
 
-        var footer = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 12, 0, 0) };
+        var footer = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
         _status = new TextBlock
         {
-            Text = "Scan the game folder or choose a folder containing mods/usermaps.",
+            Text = "Choose the PC BO3 folder, or a folder that directly contains mods/usermaps.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 10)
         };
@@ -59,7 +63,7 @@ internal sealed class ModLoaderWindow : Window
         choose.Click += (_, _) => ChooseRoot();
         buttons.Children.Add(choose);
 
-        var scan = new Button { Content = "Scan", Padding = new Thickness(16, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var scan = new Button { Content = "Rescan", Padding = new Thickness(16, 7), Margin = new Thickness(0, 0, 8, 0) };
         scan.Click += (_, _) => Scan();
         buttons.Children.Add(scan);
 
@@ -70,6 +74,11 @@ internal sealed class ModLoaderWindow : Window
         DockPanel.SetDock(footer, Dock.Bottom);
         layout.Children.Add(footer);
 
+        var body = new Grid();
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6, GridUnitType.Star), MinWidth = 470 });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(5, GridUnitType.Star), MinWidth = 300 });
+
         _grid = new DataGrid
         {
             ItemsSource = _mods,
@@ -77,22 +86,39 @@ internal sealed class ModLoaderWindow : Window
             CanUserAddRows = false,
             IsReadOnly = false,
             SelectionMode = DataGridSelectionMode.Extended,
+            SelectionUnit = DataGridSelectionUnit.FullRow,
             HeadersVisibility = DataGridHeadersVisibility.Column,
             GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-            MinHeight = 220
+            MinHeight = 250
         };
         _grid.Columns.Add(new DataGridCheckBoxColumn
         {
             Header = "Queue",
-            Binding = new System.Windows.Data.Binding(nameof(ModCandidate.Selected)) { Mode = System.Windows.Data.BindingMode.TwoWay },
+            Binding = new Binding(nameof(ModCandidate.Selected)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged },
             Width = 58
         });
-        _grid.Columns.Add(new DataGridTextColumn { Header = "Mod / map", Binding = new System.Windows.Data.Binding(nameof(ModCandidate.Name)), IsReadOnly = true, Width = new DataGridLength(1.2, DataGridLengthUnitType.Star) });
-        _grid.Columns.Add(new DataGridTextColumn { Header = "PC files", Binding = new System.Windows.Data.Binding(nameof(ModCandidate.FileCount)), IsReadOnly = true, Width = 72 });
-        _grid.Columns.Add(new DataGridTextColumn { Header = "Discovery status", Binding = new System.Windows.Data.Binding(nameof(ModCandidate.Status)), IsReadOnly = true, Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        _grid.Columns.Add(new DataGridTextColumn { Header = "Folder", Binding = new System.Windows.Data.Binding(nameof(ModCandidate.Path)), IsReadOnly = true, Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
-        layout.Children.Add(_grid);
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Package", Binding = new Binding(nameof(ModCandidate.Title)), IsReadOnly = true, Width = new DataGridLength(1.2, DataGridLengthUnitType.Star) });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Type", Binding = new Binding(nameof(ModCandidate.Category)), IsReadOnly = true, Width = 92 });
+        _grid.Columns.Add(new DataGridTextColumn { Header = ".ff", Binding = new Binding(nameof(ModCandidate.Fastfiles)), IsReadOnly = true, Width = 46 });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Status", Binding = new Binding(nameof(ModCandidate.Status)), IsReadOnly = true, Width = new DataGridLength(1.5, DataGridLengthUnitType.Star) });
+        _grid.SelectionChanged += (_, _) => ShowDetails(_grid.SelectedItem as ModCandidate);
+        body.Children.Add(_grid);
 
+        _details = new TextBox
+        {
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            Padding = new Thickness(10),
+            Text = "Select a package to inspect its files, workshop metadata and declared dependencies."
+        };
+        Grid.SetColumn(_details, 2);
+        body.Children.Add(_details);
+
+        layout.Children.Add(body);
         Content = layout;
         Loaded += (_, _) => Scan();
     }
@@ -119,56 +145,230 @@ internal sealed class ModLoaderWindow : Window
         }
 
         int skipped = 0;
-        foreach (string containerName in new[] { "mods", "usermaps" })
+        int scanned = 0;
+        foreach ((string folder, string category) in DiscoverPackageFolders(_root))
         {
-            string container = Path.Combine(_root, containerName);
-            if (!Directory.Exists(container))
-                continue;
-
-            IEnumerable<string> folders;
-            try { folders = Directory.EnumerateDirectories(container).ToArray(); }
+            scanned++;
+            try
+            {
+                ModCandidate? candidate = Inspect(folder, category);
+                if (candidate is null)
+                {
+                    skipped++;
+                    continue;
+                }
+                _mods.Add(candidate);
+            }
             catch (Exception ex)
             {
-                _log($"Mod Loader: cannot scan '{container}': {ex.Message}");
+                _log($"Mod Loader: inspection failed for '{folder}': {ex.GetType().Name}: {ex.Message}");
                 skipped++;
-                continue;
-            }
-
-            foreach (string folder in folders)
-            {
-                try
-                {
-                    string zone = Path.Combine(folder, "zone");
-                    string scanRoot = Directory.Exists(zone) ? zone : folder;
-                    string[] fastfiles = Directory.EnumerateFiles(scanRoot, "*.ff", SearchOption.TopDirectoryOnly).ToArray();
-                    if (fastfiles.Length == 0)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    bool hasScriptTree = Directory.Exists(Path.Combine(zone, "gamedata"));
-                    string status = hasScriptTree
-                        ? "Fastfiles found; script/dependency compatibility not verified"
-                        : "Fastfiles found; PS4 compatibility not verified";
-                    _mods.Add(new ModCandidate
-                    {
-                        Name = Path.GetFileName(folder),
-                        Path = folder,
-                        FileCount = fastfiles.Length,
-                        Status = status
-                    });
-                }
-                catch (Exception ex)
-                {
-                    _log($"Mod Loader: skipped '{folder}': {ex.Message}");
-                    skipped++;
-                }
             }
         }
 
-        _status.Text = $"{_mods.Count} candidate folder(s) found; {skipped} folder(s) had no top-level .ff or could not be read. Discovery is not a compatibility verdict.";
-        _log($"Mod Loader scan: root='{_root}', candidates={_mods.Count}, skipped={skipped}. No package was converted or deployed.");
+        _status.Text = $"{_mods.Count} package candidate(s) found from {scanned} folder(s); {skipped} had no usable fastfiles or could not be inspected. Status is a file-based assessment, not a PS4 compatibility guarantee.";
+        _log($"Mod Loader scan: root='{_root}', scanned={scanned}, candidates={_mods.Count}, skipped={skipped}.");
+        if (_mods.Count > 0)
+            _grid.SelectedIndex = 0;
+    }
+
+    private static IEnumerable<(string Folder, string Category)> DiscoverPackageFolders(string root)
+    {
+        string full = Path.GetFullPath(root);
+        string leaf = Path.GetFileName(full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (Directory.Exists(Path.Combine(full, "zone")) || Directory.Exists(Path.Combine(full, "zone".ToUpperInvariant())))
+        {
+            yield return (full, "Folder");
+            yield break;
+        }
+
+        string? directCategory = leaf.Equals("mods", StringComparison.OrdinalIgnoreCase) ? "Mod"
+            : leaf.Equals("usermaps", StringComparison.OrdinalIgnoreCase) ? "Map" : null;
+        if (directCategory != null)
+        {
+            foreach (string child in SafeDirectories(full))
+                yield return (child, directCategory);
+            yield break;
+        }
+
+        foreach (string categoryName in new[] { "mods", "usermaps" })
+        {
+            string container = Path.Combine(full, categoryName);
+            if (!Directory.Exists(container))
+                continue;
+            foreach (string child in SafeDirectories(container))
+                yield return (child, categoryName.Equals("mods", StringComparison.OrdinalIgnoreCase) ? "Mod" : "Map");
+        }
+    }
+
+    private static IEnumerable<string> SafeDirectories(string root)
+    {
+        try
+        {
+            foreach (string directory in Directory.EnumerateDirectories(root))
+            {
+                try
+                {
+                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
+                        yield return directory;
+                }
+                catch (Exception) { }
+            }
+        }
+        catch (Exception) { }
+    }
+
+    private static ModCandidate? Inspect(string folder, string category)
+    {
+        var files = EnumerateFilesBounded(folder, 50000).ToArray();
+        string[] fastfiles = files.Where(p => Path.GetExtension(p).Equals(".ff", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (fastfiles.Length == 0)
+            return null;
+
+        string[] xpaks = files.Where(p => Path.GetExtension(p).Equals(".xpak", StringComparison.OrdinalIgnoreCase)).ToArray();
+        string[] soundBanks = files.Where(p =>
+        {
+            string ext = Path.GetExtension(p);
+            return ext.Equals(".sabs", StringComparison.OrdinalIgnoreCase) || ext.Equals(".sabl", StringComparison.OrdinalIgnoreCase);
+        }).ToArray();
+        string[] movies = files.Where(p => Path.GetExtension(p).Equals(".mkv", StringComparison.OrdinalIgnoreCase)).ToArray();
+        string[] scripts = files.Where(p =>
+        {
+            string ext = Path.GetExtension(p);
+            return ext.Equals(".gsc", StringComparison.OrdinalIgnoreCase) || ext.Equals(".csc", StringComparison.OrdinalIgnoreCase) || ext.Equals(".lua", StringComparison.OrdinalIgnoreCase);
+        }).ToArray();
+
+        string title = Path.GetFileName(folder);
+        string description = "";
+        string workshopId = "";
+        var dependencies = new List<string>();
+        string manifestPath = files.FirstOrDefault(p => Path.GetFileName(p).Equals("workshop.json", StringComparison.OrdinalIgnoreCase)) ?? "";
+        if (manifestPath.Length > 0)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+                JsonElement root = doc.RootElement;
+                title = ReadString(root, "Title") ?? ReadString(root, "title") ?? title;
+                description = ReadString(root, "Description") ?? ReadString(root, "description") ?? "";
+                workshopId = ReadString(root, "UGC") ?? ReadString(root, "ugc") ?? ReadString(root, "WorkshopId") ?? ReadString(root, "workshopId") ?? "";
+                foreach (string key in new[] { "Dependencies", "dependencies", "RequiredItems", "requiredItems" })
+                {
+                    if (!root.TryGetProperty(key, out JsonElement values) || values.ValueKind != JsonValueKind.Array)
+                        continue;
+                    foreach (JsonElement value in values.EnumerateArray())
+                    {
+                        string? dependency = value.ValueKind == JsonValueKind.String ? value.GetString()
+                            : value.ValueKind == JsonValueKind.Object ? ReadString(value, "UGC") ?? ReadString(value, "id") ?? ReadString(value, "name") : null;
+                        if (!string.IsNullOrWhiteSpace(dependency))
+                            dependencies.Add(dependency);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                description = $"workshop.json could not be parsed: {ex.Message}";
+            }
+        }
+
+        bool mapLike = category.Equals("Map", StringComparison.OrdinalIgnoreCase)
+            || fastfiles.Any(p => Path.GetFileNameWithoutExtension(p).StartsWith("zm_", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileNameWithoutExtension(p).StartsWith("mp_", StringComparison.OrdinalIgnoreCase));
+        string status = mapLike
+            ? "Map-like fastfiles; conversion can still reject unsupported assets"
+            : "PC mod fastfiles; generic gameplay/script mods are not automatically portable";
+        if (scripts.Length > 0)
+            status += $"; {scripts.Length} source/script file(s) found";
+        if (files.Length >= 50000)
+            status += "; scan capped at 50,000 files";
+
+        return new ModCandidate
+        {
+            Name = Path.GetFileName(folder),
+            Title = title,
+            Path = folder,
+            Category = mapLike ? "Map candidate" : "PC mod",
+            Status = status,
+            Fastfiles = fastfiles.Length,
+            TotalFiles = files.Length,
+            Xpaks = xpaks.Length,
+            SoundBanks = soundBanks.Length,
+            Movies = movies.Length,
+            Scripts = scripts.Length,
+            WorkshopId = workshopId,
+            Description = description,
+            ManifestPath = manifestPath,
+            Dependencies = dependencies.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            SampleFiles = files.Take(120).Select(p => Path.GetRelativePath(folder, p)).ToArray()
+        };
+    }
+
+    private static IEnumerable<string> EnumerateFilesBounded(string root, int maxFiles)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+        int emitted = 0;
+        while (pending.Count > 0 && emitted < maxFiles)
+        {
+            string current = pending.Pop();
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(current).ToArray(); }
+            catch (Exception) { continue; }
+
+            foreach (string file in files)
+            {
+                yield return file;
+                if (++emitted >= maxFiles)
+                    yield break;
+            }
+
+            foreach (string directory in SafeDirectories(current))
+                pending.Push(directory);
+        }
+    }
+
+    private static string? ReadString(JsonElement root, string name) =>
+        root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private void ShowDetails(ModCandidate? candidate)
+    {
+        if (candidate is null)
+        {
+            _details.Text = "Select a package to inspect it.";
+            return;
+        }
+
+        var text = new StringBuilder();
+        text.AppendLine(candidate.Title);
+        text.AppendLine(new string('=', Math.Min(candidate.Title.Length, 60)));
+        text.AppendLine($"Type: {candidate.Category}");
+        text.AppendLine($"Folder: {candidate.Path}");
+        text.AppendLine($"Workshop ID: {(candidate.WorkshopId.Length > 0 ? candidate.WorkshopId : "not declared")}");
+        text.AppendLine($"Files scanned: {candidate.TotalFiles}");
+        text.AppendLine($"Fastfiles (.ff): {candidate.Fastfiles}");
+        text.AppendLine($"XPAKs: {candidate.Xpaks}");
+        text.AppendLine($"Sound banks (.sabs/.sabl): {candidate.SoundBanks}");
+        text.AppendLine($"Movies (.mkv): {candidate.Movies}");
+        text.AppendLine($"Script/source files (.gsc/.csc/.lua): {candidate.Scripts}");
+        text.AppendLine($"Metadata: {(candidate.ManifestPath.Length > 0 ? candidate.ManifestPath : "workshop.json not found")}");
+        text.AppendLine();
+        text.AppendLine("Assessment:");
+        text.AppendLine(candidate.Status);
+        text.AppendLine();
+        text.AppendLine("Description:");
+        text.AppendLine(candidate.Description.Length > 0 ? candidate.Description : "(none in workshop.json)");
+        text.AppendLine();
+        text.AppendLine("Declared dependencies:");
+        text.AppendLine(candidate.Dependencies.Length > 0 ? string.Join(Environment.NewLine, candidate.Dependencies.Select(d => " • " + d)) : "(none declared)");
+        text.AppendLine();
+        text.AppendLine("Sample file inventory:");
+        foreach (string file in candidate.SampleFiles)
+            text.AppendLine(" • " + file);
+        if (candidate.TotalFiles > candidate.SampleFiles.Length)
+            text.AppendLine($"… inventory display limited to {candidate.SampleFiles.Length} entries.");
+        _details.Text = text.ToString();
     }
 
     private void QueueSelected()
@@ -181,16 +381,28 @@ internal sealed class ModLoaderWindow : Window
         }
 
         _queuePaths(selected.Select(m => m.Path).ToArray());
-        _status.Text = $"Queued {selected.Length} folder(s) for the existing conversion pipeline. Review its reports before deploying anything.";
-        _log($"Mod Loader: queued {selected.Length} selected candidate folder(s) for conversion.");
+        _status.Text = $"Queued {selected.Length} candidate folder(s). Check the conversion queue and fidelity report; discovery does not imply PS4 compatibility.";
+        _log($"Mod Loader: queued {selected.Length} selected candidate folder(s) for the existing conversion pipeline.");
     }
 
     private sealed class ModCandidate
     {
         public bool Selected { get; set; }
         public string Name { get; set; } = "";
-        public int FileCount { get; set; }
+        public string Title { get; set; } = "";
+        public string Category { get; set; } = "";
         public string Status { get; set; } = "";
         public string Path { get; set; } = "";
+        public int Fastfiles { get; set; }
+        public int TotalFiles { get; set; }
+        public int Xpaks { get; set; }
+        public int SoundBanks { get; set; }
+        public int Movies { get; set; }
+        public int Scripts { get; set; }
+        public string WorkshopId { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string ManifestPath { get; set; } = "";
+        public string[] Dependencies { get; set; } = [];
+        public string[] SampleFiles { get; set; } = [];
     }
 }
