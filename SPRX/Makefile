@@ -19,7 +19,7 @@ CRT_LOCAL := $(BUILD_DIR)/crtlib-local.o
 LINKER_SCRIPT := $(BUILD_DIR)/link.x
 SYMBOL_REPORT := $(BUILD_DIR)/BO3-Customs.symbols.txt
 
-LIBS := -lc -lc++ -lkernel -lSceSysmodule -lSceUserService -lSceMouse
+LIBS := -lc -lc++ -lkernel -lSceSysmodule -lSceUserService
 
 COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables \
 	-DBO3_OPENORBIS=1 -Iopenorbis_compat \
