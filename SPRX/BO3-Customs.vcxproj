@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="libjbc.cpp" />
+    <ClCompile Include="diag.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="platform.cpp" />
     <ClCompile Include="Detour.cpp" />
@@ -25,6 +26,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="headers.hpp" />
+    <ClInclude Include="diag.hpp" />
     <ClInclude Include="libjbc.h" />
     <ClInclude Include="platform.hpp" />
     <ClInclude Include="Detour.hpp" />

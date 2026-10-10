@@ -16,6 +16,7 @@
 #include "libjbc.h"
 
 #include "platform.hpp"
+#include "diag.hpp"
 #include "t7_maps.hpp"
 #include "t7_mapimages.hpp"
 #include "t7_lua.hpp"
