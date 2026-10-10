@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.1.4";
+    private const string ForkVersion = "Fork 1.2.1.5";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
