@@ -21,6 +21,12 @@ Ensure you have **version 1.33** of the game installed on your console (**any re
 Maps can also go on a USB drive or extended storage (`/mnt/usb0-7/`, `/mnt/ext0-7/`), in `BO3-Customs/usermaps/`
 at the root of the drive (a `BO3-Customs/zone/` there works too). Everything else stays in `/data/BO3-Customs/`.
 
+## Desktop Mod Loader
+
+Use the **Mod Loader** button in FF Porter to scan the PC game's `mods` and `usermaps` folders. It inventories fastfiles, XPAKs, sound banks, movies and script/source files; reads available `workshop.json` metadata and declared dependencies; and can export a JSON scan report. Select candidate folders to send them through the existing conversion queue.
+
+The scanner is deliberately conservative: finding PC files does **not** mean a package is compatible with PS4 BO3 1.33. Generic PC gameplay/script mods may need porting work that the map conversion pipeline cannot automatically perform. Review conversion output and fidelity reports before copying anything to the console.
+
 ## Console Layout
 ```text
 /data/BO3-Customs/
