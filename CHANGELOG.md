@@ -1,5 +1,12 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.36 (remove keyboard/mouse integration; desktop package 1.2.1.5)
+- Removed the PS4 keyboard/mouse input subsystem, settings interception, mouse readiness API, mouse SDK link dependency, and its startup initialization.
+- Kept the existing BO3 1.33 map hooks, map selection, graphics options, restart UI, diagnostics, and notification path intact.
+- Added detailed PC mod discovery to the desktop Mod Loader: fastfiles, XPAKs, sound banks, movies, script/source files, workshop metadata, declared dependencies, and a sample file inventory.
+- Desktop discovery labels map-like candidates separately from generic PC mods and explicitly warns that file discovery does not prove PS4 compatibility. Selected candidates are sent to the existing conversion queue.
+- CI now builds this feature branch without publishing branch artifacts over the rolling release. A successful build does not replace BO3 1.33 console testing.
+
 ## Fork 1.2.1.35 (fix keyboard dispatch and stabilize mouse button handling; desktop package remains 1.2.1.4)
 - Normalize ordinary keyboard letters to lowercase before forwarding to BO3 so engine bindings and the custom key map use the same key codes.
 - Avoid rebuilding controller bindings when switching away from gamepad input; this was an unsafe call during title/menu mouse input.
