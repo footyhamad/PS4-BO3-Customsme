@@ -1,0 +1,7 @@
+#pragma once
+#include <orbis/UserService.h>
+#include <orbis/_types/user.h>
+typedef OrbisUserServiceUserId SceUserServiceUserId;
+typedef OrbisUserServiceLoginUserIdList SceUserServiceLoginUserIdList;
+#define SCE_USER_SERVICE_MAX_LOGIN_USERS ORBIS_USER_SERVICE_MAX_LOGIN_USERS
+#define SCE_USER_SERVICE_USER_ID_INVALID ORBIS_USER_SERVICE_USER_ID_INVALID

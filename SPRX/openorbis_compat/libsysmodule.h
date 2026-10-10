@@ -1,0 +1,4 @@
+#pragma once
+#include <orbis/Sysmodule.h>
+#define SCE_SYSMODULE_MOUSE ORBIS_SYSMODULE_MOUSE
+#define SCE_SYSMODULE_LIBIME ORBIS_SYSMODULE_LIBIME

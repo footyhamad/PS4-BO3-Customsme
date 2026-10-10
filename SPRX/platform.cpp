@@ -34,12 +34,41 @@ namespace {
     using SendNotification_t = int (*)(int, void*, size_t, int);
     SendNotification_t g_sendNotification = nullptr;
     bool g_notificationReady = false;
+
+    static uintptr_t QueryStart(const SceKernelVirtualQueryInfo& info)
+    {
+#ifdef BO3_OPENORBIS
+        return (uintptr_t)info.start_addr;
+#else
+        return (uintptr_t)info.start;
+#endif
+    }
+
+    static uintptr_t QueryEnd(const SceKernelVirtualQueryInfo& info)
+    {
+#ifdef BO3_OPENORBIS
+        return (uintptr_t)info.end_addr;
+#else
+        return (uintptr_t)info.end;
+#endif
+    }
+
+    static int QueryProtection(const SceKernelVirtualQueryInfo& info)
+    {
+#ifdef BO3_OPENORBIS
+        return info.prot;
+#else
+        return info.protection;
+#endif
+    }
 }
 
+#ifndef BO3_OPENORBIS
 extern "C" {
     int sceKernelSendNotificationRequest(int device, void* request, size_t size, int block);
     int mdbg_service(int command, void* arg1, void* arg2);
 }
+#endif
 
 uint64_t GetBaseAddress() {
     static uint64_t cached = 0;
@@ -51,15 +80,15 @@ uint64_t GetBaseAddress() {
     void* address = nullptr;
 
     while (sceKernelVirtualQuery(address, SCE_KERNEL_VQ_FIND_NEXT, &info, sizeof(info)) >= 0) {
-        const uintptr_t start = (uintptr_t)info.start;
-        const uintptr_t end = (uintptr_t)info.end;
+        const uintptr_t start = QueryStart(info);
+        const uintptr_t end = QueryEnd(info);
 
         if (end <= start)
             break;
 
         address = (void*)end;
 
-        if (info.protection != 5 || strcmp(info.name, "executable") != 0)
+        if (QueryProtection(info) != 5 || strcmp(info.name, "executable") != 0)
             continue;
 
         cached = start;
@@ -74,10 +103,10 @@ uint64_t GetBaseAddress() {
             if (sceKernelVirtualQuery((void*)probe, 0, &next, sizeof(next)) < 0)
                 break;
 
-            const uintptr_t ns = (uintptr_t)next.start;
-            const uintptr_t ne = (uintptr_t)next.end;
+            const uintptr_t ns = QueryStart(next);
+            const uintptr_t ne = QueryEnd(next);
 
-            if (ne <= ns || ns > g_moduleEnd || (next.protection & 1) == 0)
+            if (ne <= ns || ns > g_moduleEnd || (QueryProtection(next) & 1) == 0)
                 break;
 
             g_moduleEnd = ne;
@@ -102,7 +131,7 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
         if (sceKernelVirtualQuery((void*)probe, 0, &info, sizeof(info)) < 0)
             break;
 
-        if ((info.protection & 1) == 0)
+        if ((QueryProtection(info) & 1) == 0)
             break;
 
         const uintptr_t start = (uintptr_t)info.start;
@@ -193,6 +222,8 @@ void Notify(const char* fmt, ...) {
 
     if (g_sendNotification)
         g_sendNotification(0, &request, sizeof(request), 0);
+#ifndef BO3_OPENORBIS
     else
         sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+#endif
 }

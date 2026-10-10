@@ -9,7 +9,9 @@
 #include <string>
 
 #include <kernel.h>
+#ifndef BO3_OPENORBIS
 #include <sys/mman.h>
+#endif
 
 #include "HDE64.h"
 #include "Detour.hpp"

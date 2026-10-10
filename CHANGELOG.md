@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.14 (OpenOrbis SPRX build pipeline; desktop package remains 1.2.1.4)
+- Added an OpenOrbis PS4 Toolchain build path using Clang/LLD and the open-source create-fself utility, plus local Makefile instructions and a GitHub Actions build.
+- Added isolated SDK compatibility headers for kernel, mouse, IME, sysmodule and user-service declarations; kept the existing Sony SDK/Visual Studio path intact.
+- Added separate SPRX artifact/release publishing so SPRX builds do not overwrite the desktop tool release. OpenOrbis compilation and PS4 runtime compatibility must be confirmed by the build/test results.
+
 ## Fork 1.2.1.13 (SPRX diagnostics portability; desktop package remains 1.2.1.4)
 - Match the atomic frame-counter operand to the `uint64_t` type used by the PS4 SDK and publish the map-count snapshot atomically for the independent monitor.
 - Make the storage probe log distinguish “PS5 marker found” from “marker not found” instead of treating an open failure as definitive PS4 identification.
