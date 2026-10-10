@@ -661,7 +661,9 @@ static void ScanSharedZones(const char* data)
 static const char* Relative(const char* path)
 {
     const char* const folder = (const char*)(g_base + kZoneFolder);
-    const size_t n = strnlen(folder, 260);
+    size_t n = 0;
+    while (n < 260 && folder[n])
+        ++n;
 
     if (n && n < 260 && strncmp(path, folder, n) == 0 && (path[n] == '/' || path[n] == '\\'))
         return path + n + 1;
@@ -2816,7 +2818,7 @@ static bool BuildMatches(uintptr_t base)
         {
             BO3Diag_Log(BO3_DIAG_FATAL, "BUILD",
                 "signature unreadable name=%s offset=+0x%llX address=0x%llX bytes=%llu",
-                check.name, (unsigned long long)check.offset, (unsigned long long)at, (unsigned long long)check.size);
+                check.what, (unsigned long long)check.offset, (unsigned long long)at, (unsigned long long)check.size);
             return false;
         }
         if (memcmp((const void*)at, check.bytes, check.size) != 0)
@@ -2834,12 +2836,12 @@ static bool BuildMatches(uintptr_t base)
             }
             BO3Diag_Log(BO3_DIAG_FATAL, "BUILD",
                 "signature mismatch name=%s offset=+0x%llX address=0x%llX bytes=%llu expected=[%s] actual=[%s]",
-                check.name, (unsigned long long)check.offset, (unsigned long long)at,
+                check.what, (unsigned long long)check.offset, (unsigned long long)at,
                 (unsigned long long)check.size, expected, actual);
             return false;
         }
         BO3Diag_Log(BO3_DIAG_INFO, "BUILD", "signature matched name=%s offset=+0x%llX bytes=%llu",
-            check.name, (unsigned long long)check.offset, (unsigned long long)check.size);
+            check.what, (unsigned long long)check.offset, (unsigned long long)check.size);
     }
     BO3Diag_Log(BO3_DIAG_INFO, "BUILD", "all mandatory BO3 1.33 signatures matched");
     return true;

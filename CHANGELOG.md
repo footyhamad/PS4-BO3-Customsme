@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.20 (fix OpenOrbis map scan declarations; desktop package remains 1.2.1.4)
+- Added the OpenOrbis `SceKernelDirent` alias to the SDK's `struct dirent`, with a fallback `DT_DIR` constant and `d_fileno` alias where needed.
+- Replaced the unsupported `strnlen` use with an explicit bounded scan and fixed the existing `Prologue::what` field-name typo in the build preflight logger.
+
 ## Fork 1.2.1.19 (add OpenOrbis file-stat alias; desktop package remains 1.2.1.4)
 - Added `SceKernelStat` as an alias for `OrbisKernelStat` in the OpenOrbis compatibility header, resolving the map-image reader's missing type while preserving the standard `st_size` access.
 

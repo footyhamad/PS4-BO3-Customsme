@@ -43,3 +43,6 @@ Fork 1.2.1.18 adds a size/offset-checked ABI view for OpenOrbis virtual-query me
 
 
 Fork 1.2.1.19 adds the `SceKernelStat` compatibility alias for OpenOrbis' `OrbisKernelStat` so file-size checks in map-image loading compile against the open toolchain.
+
+
+Fork 1.2.1.20 adapts the map scanner to OpenOrbis directory-entry declarations and removes a non-portable bounded-string call. It also fixes a diagnostic field-name typo that prevented `t7_maps.cpp` from compiling.

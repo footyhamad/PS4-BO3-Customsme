@@ -36,3 +36,8 @@ The OpenOrbis path now reads virtual-query address/protection/name fields throug
 ## OpenOrbis stat alias (Fork 1.2.1.19)
 
 Added the missing compatibility alias from Sony SDK naming to OpenOrbis' `OrbisKernelStat`, used by custom image/file reads.
+
+
+## OpenOrbis map-scan compatibility (Fork 1.2.1.20)
+
+Added a directory-entry alias for OpenOrbis' FreeBSD-style records, supplied a portable directory-type fallback, replaced the unavailable `strnlen` use with a bounded loop, and corrected BO3 1.33 signature diagnostics to use the existing `Prologue::what` field.

@@ -8,6 +8,16 @@
 #include <fcntl.h>
 #include <dirent.h>
 
+// Sony SDK-compatible name for the FreeBSD-style directory records returned by sceKernelGetdents.
+typedef struct dirent SceKernelDirent;
+
+#ifndef DT_DIR
+#define DT_DIR 4
+#endif
+#ifndef d_fileno
+#define d_fileno d_ino
+#endif
+
 typedef OrbisKernelVirtualQueryInfo SceKernelVirtualQueryInfo;
 typedef OrbisKernelStat SceKernelStat;
 typedef OrbisPthread ScePthread;
