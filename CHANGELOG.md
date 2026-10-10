@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.26 (SPRX entrypoint/constructor isolation; desktop package remains 1.2.1.4)
+- Initialize and persist diagnostics, then emit an entrypoint-canary notification before running OpenOrbis C++ global constructors.
+- Log the init-array bounds and each constructor before/after execution, and emit a second notification when constructor traversal completes; this distinguishes a module-entry failure from a constructor hang before the next PS4 test.
+- Reject invalid constructor-array bounds rather than traversing a malformed range. Runtime validation still requires BO3 1.33 on the console.
+
 ## Fork 1.2.1.25 (SPRX OpenOrbis runtime startup fix; desktop package remains 1.2.1.4)
 - Resolve notifications through OpenOrbis' direct libkernel import and record the notification return code; keep the Sony-SDK lookup/fallback path unchanged.
 - Make BO3 base discovery on OpenOrbis fall back to the known BO3 1.33 title signature when the memory mapping is not named exactly `executable`.

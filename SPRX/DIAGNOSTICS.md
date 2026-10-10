@@ -15,7 +15,7 @@ Debug builds still create the older `/data/BO3-Customs/log.txt` for extra stack/
 - Lua/UI patch outcomes, image hooks, keyboard/mouse signatures and mouse initialization, script failures, zone events and level transitions.
 - An independent monitor thread emits a heartbeat every ten seconds, including startup phase, uptime, executable base, last stable map-count snapshot, frame-hook status and frame-call count; it can report when frame calls stop advancing.
 - Module-load diagnostics before game detection, one-second wait progress, initialization-thread return codes, storage probe/mount results, subsystem start/end breadcrumbs and detailed main-frame-hook signature failures.
-- OpenOrbis executable-base fallback based on the BO3 1.33 title marker and notification API return codes. Startup and detection-timeout notifications make early exits visible when the console notification service accepts requests.
+- OpenOrbis executable-base fallback based on the BO3 1.33 title marker and notification API return codes. An entrypoint-canary notification is sent before OpenOrbis global constructors; a second notification is sent after constructor traversal. Per-constructor before/after records identify the last constructor reached if startup stops before game detection. A detection-timeout notification is also sent when the console notification service accepts requests.
 
 ## How to triage a crash
 

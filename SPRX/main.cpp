@@ -321,20 +321,51 @@ extern "C"
 {
 int module_start(size_t argc, const void* args)
 {
-#if defined(BO3_OPENORBIS)
-    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "running OpenOrbis C++ init array begin=%p end=%p",
-        __init_array_start, __init_array_end);
-    for (void (**init)(void) = __init_array_start; init != __init_array_end; ++init)
-    {
-        if (*init)
-            (*init)();
-    }
-    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "OpenOrbis C++ init array complete");
-#endif
+    // This is deliberately before C++ global constructors: if init_array is the
+    // failure point, we still need a persisted breadcrumb and a visible canary.
     BO3Diag_Init();
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_start entered argc=%llu args=%p",
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT",
+        "module_start entered before C++ init argc=%llu args=%p",
         (unsigned long long)argc, args);
-    Notify("BO3 Customs SPRX %s started; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
+    Notify("BO3 Customs SPRX %s entered module_start; C++ init next", BO3_CUSTOMS_SPRX_VERSION);
+
+#if defined(BO3_OPENORBIS)
+    const uintptr_t ctorStart = (uintptr_t)__init_array_start;
+    const uintptr_t ctorEnd = (uintptr_t)__init_array_end;
+    BO3Diag_Log(BO3_DIAG_INFO, "CRT",
+        "OpenOrbis init array begin=%p end=%p entries=%llu",
+        __init_array_start, __init_array_end,
+        ctorEnd >= ctorStart ? (unsigned long long)((ctorEnd - ctorStart) / sizeof(void*)) : 0ull);
+    if (ctorEnd < ctorStart || ((ctorEnd - ctorStart) % sizeof(void*)) != 0)
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "CRT",
+            "invalid init-array boundaries begin=%p end=%p; refusing constructor traversal",
+            __init_array_start, __init_array_end);
+        Notify("BO3 Customs SPRX: invalid C++ init array; see diagnostics.log");
+        return -1;
+    }
+
+    uint64_t ctorIndex = 0;
+    for (void (**init)(void) = __init_array_start; init != __init_array_end; ++init, ++ctorIndex)
+    {
+        if (!*init)
+        {
+            BO3Diag_Log(BO3_DIAG_WARN, "CRT", "constructor index=%llu is null; skipped",
+                (unsigned long long)ctorIndex);
+            continue;
+        }
+
+        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "calling constructor index=%llu address=%p",
+            (unsigned long long)ctorIndex, (void*)*init);
+        (*init)();
+        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "constructor returned index=%llu address=%p",
+            (unsigned long long)ctorIndex, (void*)*init);
+    }
+    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "OpenOrbis C++ init array complete entries=%llu",
+        (unsigned long long)ctorIndex);
+    Notify("BO3 Customs SPRX %s C++ init passed; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
+#endif
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "startup phase: waiting for BO3 1.33");
 
     g_diagnosticsThreadCreated = false;
     __atomic_store_n(&g_monitorRunning, true, __ATOMIC_RELEASE);
