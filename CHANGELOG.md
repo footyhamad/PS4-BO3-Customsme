@@ -1,5 +1,12 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.11 (SPRX diagnostics; desktop package remains 1.2.1.4)
+- Added an always-on append-only diagnostics log for Release and Debug builds at `/data/BO3-Customs/diagnostics.log`, with a fallback path and per-record writes/close.
+- Added ten-second runtime heartbeats, detailed BO3 1.33 signature mismatch reporting, subsystem stage timing, per-root map-scan totals, and release-build event breadcrumbs.
+- Added checked detour writes/memory protection, hook-specific outcomes, rollback attempts, and retryable hook registration after failed attachment.
+- Gated fixed-offset logger, map-image, Lua/UI, keyboard/mouse and generic detour installation behind the BO3 1.33 signature preflight.
+- Added `SPRX/DIAGNOSTICS.md` with log locations and crash-triage instructions. Actual PS4 SDK compilation and console runtime testing are still required.
+
 ## Fork 1.2.1.4
 - Fixed rolling-release publishing so an existing fork-latest release is edited instead of incorrectly attempting to recreate it.
 - Release publishing now checks native GitHub CLI exit codes and fails the build when release metadata or asset upload fails.

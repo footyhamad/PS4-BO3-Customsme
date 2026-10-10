@@ -275,6 +275,16 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
             hookName, This, (unsigned long long)FunctionPtr, HookPtr);
         return 0;
     }
+
+    const uintptr_t gameBase = (uintptr_t)GetBaseAddress();
+    if (!gameBase || !T7Maps_IsBuildSupported(gameBase))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "DETOUR",
+            "attach refused name=%s target=0x%llX: mandatory BO3 1.33 preflight failed",
+            hookName, (unsigned long long)FunctionPtr);
+        return 0;
+    }
+
     if (This->Installed)
     {
         if (OutStub) *OutStub = This->StubPtr;

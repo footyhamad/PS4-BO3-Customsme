@@ -2862,26 +2862,46 @@ static bool CheckBuild(uintptr_t base)
 
 static void ScanAll()
 {
+    const uint64_t scanStarted = BO3Diag_UptimeUs();
     g_packageCount = 0;
     g_fileCount = 0;
     g_movieCount = 0;
     g_levelCommon = -1;
     g_listedMaps = 0;
 
+    BO3Diag_Log(BO3_DIAG_INFO, "SCAN", "scan begin root=/data/BO3-Customs external_roots=%llu",
+        (unsigned long long)(sizeof(k_driveRoots) / sizeof(k_driveRoots[0])));
     ScanUsermaps("/data/BO3-Customs");
     ScanSharedZones("/data/BO3-Customs");
+    BO3Diag_Log(BO3_DIAG_INFO, "SCAN",
+        "local scan result packages=%d files=%d maps=%d movies=%d",
+        g_packageCount, g_fileCount, g_listedMaps, g_movieCount);
 
     for (const char* const drive : k_driveRoots)
     {
+        const int packagesBefore = g_packageCount;
+        const int filesBefore = g_fileCount;
+        const int mapsBefore = g_listedMaps;
         char data[64];
         snprintf(data, sizeof(data), "/%s/BO3-Customs", drive);
         ScanUsermaps(data);
         ScanSharedZones(data);
+        BO3Diag_Log(BO3_DIAG_INFO, "SCAN",
+            "drive root=%s package_delta=%d file_delta=%d map_delta=%d totals(packages=%d files=%d maps=%d)",
+            data, g_packageCount - packagesBefore, g_fileCount - filesBefore, g_listedMaps - mapsBefore,
+            g_packageCount, g_fileCount, g_listedMaps);
     }
 
+    const uint64_t movieStarted = BO3Diag_UptimeUs();
     ScanMovies();
+    BO3Diag_Log(BO3_DIAG_INFO, "SCAN", "movie scan result count=%d elapsed_ms=%llu",
+        g_movieCount, (unsigned long long)((BO3Diag_UptimeUs() - movieStarted) / 1000ull));
     BuildCustomMapsLua();
     BuildMapsTableLua();
+    BO3Diag_Log(BO3_DIAG_INFO, "SCAN",
+        "scan complete packages=%d files=%d maps=%d movies=%d level_common_package=%d elapsed_ms=%llu",
+        g_packageCount, g_fileCount, g_listedMaps, g_movieCount, g_levelCommon,
+        (unsigned long long)((BO3Diag_UptimeUs() - scanStarted) / 1000ull));
 }
 
 static void InstallHooks(uintptr_t base)
