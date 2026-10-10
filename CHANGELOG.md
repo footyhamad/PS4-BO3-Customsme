@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.13 (SPRX diagnostics portability; desktop package remains 1.2.1.4)
+- Match the atomic frame-counter operand to the `uint64_t` type used by the PS4 SDK and publish the map-count snapshot atomically for the independent monitor.
+- Make the storage probe log distinguish “PS5 marker found” from “marker not found” instead of treating an open failure as definitive PS4 identification.
+
 ## Fork 1.2.1.12 (SPRX startup and heartbeat diagnostics; desktop package remains 1.2.1.4)
 - Initialize persistent diagnostics at module load, before waiting for BO3, and log detection timeouts, thread failures, storage-probe/mount results, subsystem stages, and the main frame-hook signature/outcome.
 - Run the ten-second heartbeat from an independent monitor thread so it continues recording when the game's frame hook stalls; include a frame-stalled state when frame calls stop advancing.

@@ -25,6 +25,7 @@ volatile uintptr_t g_gameBase = 0;
 volatile int g_startupPhase = kPhaseModuleStart;
 volatile bool g_frameHookInstalled = false;
 volatile bool g_monitorRunning = true;
+volatile int g_diagnosticMapCount = -1;
 uint64_t g_frameCallCount = 0;
 ScePthread g_diagnosticsThread{};
 bool g_diagnosticsThreadCreated = false;
@@ -55,7 +56,7 @@ const char* PhaseName()
 uint64_t Frame_h(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6,
                  double x0, double x1, double x2, double x3, double x4, double x5, double x6, double x7)
 {
-    __atomic_add_fetch(&g_frameCallCount, 1ull, __ATOMIC_RELAXED);
+    __atomic_add_fetch(&g_frameCallCount, (uint64_t)1, __ATOMIC_RELAXED);
     T7Lua_Tick();
 
     // The detour is only installed after a non-null trampoline has been verified.
@@ -130,7 +131,8 @@ static void* diagnostics_thread(void*)
 
         const bool frameStalled = frameHook && frameCalls > 0 &&
             now >= lastFrameProgressUs && now - lastFrameProgressUs >= 10000000ull;
-        BO3Diag_Heartbeat(PhaseName(), base, T7Maps_MapCount(), frameHook, frameCalls, frameStalled);
+        const int mapCount = __atomic_load_n(&g_diagnosticMapCount, __ATOMIC_ACQUIRE);
+        BO3Diag_Heartbeat(PhaseName(), base, mapCount, frameHook, frameCalls, frameStalled);
         sceKernelUsleep(1000 * 1000);
     }
 
@@ -178,7 +180,7 @@ static void* start_thread(void*)
     }
     BO3Diag_Log(is_ps5 ? BO3_DIAG_WARN : BO3_DIAG_INFO, "STORAGE",
         "console sandbox probe path=%s open_rc=0x%08X detected_platform=%s",
-        path, (uint32_t)fd, is_ps5 ? "PS5-like-layout; drive mounting skipped" : "PS4-like-layout");
+        path, (uint32_t)fd, is_ps5 ? "PS5-layout-marker-found; drive mounting skipped" : "PS5-layout-marker-not-found; attempting drive mounts");
 
     if (!is_ps5)
     {
@@ -217,6 +219,7 @@ static void* start_thread(void*)
     BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "starting custom map loader");
     T7Maps_Install(base);
     const int mapCountAfterInstall = T7Maps_MapCount();
+    __atomic_store_n(&g_diagnosticMapCount, mapCountAfterInstall, __ATOMIC_RELEASE);
     BO3Diag_Log(mapCountAfterInstall >= 0 ? BO3_DIAG_INFO : BO3_DIAG_FATAL, "BOOT",
         "custom map loader returned map_count=%d build_state=%s",
         mapCountAfterInstall, mapCountAfterInstall >= 0 ? "BO3-1.33-accepted" : "unsupported-or-preflight-failed");
@@ -276,6 +279,7 @@ static void* start_thread(void*)
     }
 
     const int finalMapCount = T7Maps_MapCount();
+    __atomic_store_n(&g_diagnosticMapCount, finalMapCount, __ATOMIC_RELEASE);
     if (finalMapCount < 0)
     {
         SetPhase(kPhaseFailed);
