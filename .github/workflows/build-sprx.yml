@@ -2,7 +2,7 @@ name: Build BO3 Customs SPRX and GoldHEN PRX
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/pc-mod-loader-both-surfaces]
     paths:
       - "SPRX/**"
       - ".github/workflows/build-sprx.yml"
@@ -119,6 +119,7 @@ jobs:
           retention-days: 30
 
       - name: Publish separate SPRX and GoldHEN PRX rolling release
+        if: github.ref == 'refs/heads/main'
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
