@@ -143,12 +143,21 @@ public static class T7ModPort
             .Where(g => g.Count() > 1)
             .Select(g => g.Key)
             .ToArray();
-        if (duplicateZones.Length > 0 || duplicateXpaks.Length > 0)
+        string[] duplicateBanks = files
+            .Where(p => Path.GetExtension(p).Equals(".sabl", StringComparison.OrdinalIgnoreCase)
+                || Path.GetExtension(p).Equals(".sabs", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToArray();
+        if (duplicateZones.Length > 0 || duplicateXpaks.Length > 0 || duplicateBanks.Length > 0)
         {
             if (duplicateZones.Length > 0)
                 problems.Add("Package has fastfiles with duplicate names that would overwrite each other in the console output: " + string.Join(", ", duplicateZones));
             if (duplicateXpaks.Length > 0)
                 problems.Add("Package has XPAKs with duplicate names that would overwrite each other in the console output: " + string.Join(", ", duplicateXpaks));
+            if (duplicateBanks.Length > 0)
+                problems.Add("Package has sound banks with duplicate names that would overwrite each other in the console output: " + string.Join(", ", duplicateBanks));
             options.Log("Mod conversion stopped before writing zones because package output names collide.");
             return Finish();
         }
@@ -190,6 +199,7 @@ public static class T7ModPort
                 ConvertSound = options.ConvertSound,
                 ConvertMovies = options.ConvertMovies,
                 ApplyDelta = options.ApplyDelta,
+                PackageRoot = source,
                 Languages = options.Languages,
                 ShaderCompiler = options.ShaderCompiler,
                 Log = message => options.Log($"[{Path.GetFileName(main)}] {message}"),
