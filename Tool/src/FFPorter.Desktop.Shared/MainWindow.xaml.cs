@@ -316,6 +316,12 @@ public partial class MainWindow : Window
         Process.Start(new ProcessStartInfo("https://github.com/footyhamad/PS4-BO3-Customsme/blob/main/CHANGELOG.md") { UseShellExecute = true });
     }
 
+    private void OpenModLoaderClick(object sender, RoutedEventArgs e)
+    {
+        var window = new ModLoaderWindow(Settings.GameFolder, AddPaths, Log.Append) { Owner = this };
+        window.ShowDialog();
+    }
+
     private void AddFilesClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Filter = "Fastfiles|*.ff", Multiselect = true, Title = $"Add {Edition.GameName} fastfiles" };
