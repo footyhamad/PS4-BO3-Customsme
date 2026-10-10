@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#define BO3_CUSTOMS_SPRX_VERSION "1.2.1.35"
+#define BO3_CUSTOMS_SPRX_VERSION "1.2.1.36"
 
 enum BO3DiagLevel
 {

@@ -29,6 +29,10 @@ public sealed class T7MapPortOptions
     public bool ConvertMovies { get; init; } = true;
     public bool ApplyDelta { get; init; } = true;
     public IReadOnlyCollection<string>? Languages { get; init; }
+    // Optional package root used only by package mod conversion.
+    // Null preserves existing map source discovery behavior.
+    public string? PackageRoot { get; init; }
+    public IReadOnlyList<string>? PackageXPaks { get; init; }
     public Shaders.T7ShaderCompiler? ShaderCompiler { get; init; }
     public Action<string> Log { get; init; } = _ => { };
 
@@ -57,7 +61,7 @@ public static class T7MapPort
         public double Cost => Estimate?.Invoke() ?? Phases.Sum(p => p.Weight);
     }
 
-    public static Companions Find(string pcMapFastFile, IReadOnlyCollection<string>? languages = null)
+    public static Companions Find(string pcMapFastFile, IReadOnlyCollection<string>? languages = null, string? packageRoot = null)
     {
         string stem = Path.GetFileNameWithoutExtension(pcMapFastFile);
         string folder = Path.GetDirectoryName(Path.GetFullPath(pcMapFastFile))!;
@@ -67,16 +71,19 @@ public static class T7MapPort
         zones.AddRange(Directory.EnumerateFiles(folder, "*_" + stem + ".ff")
             .Where(f => Path.GetFileName(f).Length == stem.Length + 6 && Wanted(Path.GetFileName(f)[..2]))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase));
+
         var banks = new List<string>();
-        string sound = Path.Combine(folder, "snd");
-        if (Directory.Exists(sound))
+        var soundRoots = new List<string> { Path.Combine(folder, "snd") };
+        if (!string.IsNullOrWhiteSpace(packageRoot) && Directory.Exists(packageRoot))
+            soundRoots.Add(Path.Combine(Path.GetFullPath(packageRoot), "snd"));
+        foreach (string sound in soundRoots.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             banks.AddRange(Directory.EnumerateFiles(sound, stem + ".*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".sabl", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".sabs", StringComparison.OrdinalIgnoreCase))
-                .Where(f => Wanted(Path.GetExtension(Path.GetFileNameWithoutExtension(f)).TrimStart('.')))
-                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase));
+                .Where(f => Wanted(Path.GetExtension(Path.GetFileNameWithoutExtension(f)).TrimStart('.'))));
         }
-        return new Companions(zones, banks);
+        return new Companions(zones, banks.Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray());
     }
 
     public static T7MapPortResult Run(T7MapPortOptions options)
@@ -85,7 +92,7 @@ public static class T7MapPort
         string input = Path.GetFullPath(options.PcMapFastFile);
         string folder = Path.GetDirectoryName(input)!;
         string stem = Path.GetFileNameWithoutExtension(input);
-        Companions companions = Find(input, options.Languages);
+        Companions companions = Find(input, options.Languages, options.PackageRoot);
         var outputs = new List<string>();
         var problems = new List<string>();
         var warnings = new List<string>();
@@ -105,24 +112,53 @@ public static class T7MapPort
             }
         }
 
-        string[] roots = UsermapRoots(folder);
-        IReadOnlyList<string> movies = options.ConvertMovies && IsUsermap(folder, roots) ? MovieSources(roots) : [];
+        string[] roots = UsermapRoots(folder, options.PackageRoot);
+        bool packageConversion = !string.IsNullOrWhiteSpace(options.PackageRoot);
+        IReadOnlyList<string> movies = options.ConvertMovies && (packageConversion || IsUsermap(folder, roots)) ? MovieSources(roots) : [];
         var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var streamedSounds = new HashSet<uint>();
         var switchedSounds = new HashSet<uint>();
         var sharedStreams = new T7StreamMap();
-        using T7PcStreamSource? pcStreams = options.ConvertStreams && options.PcStreamXPaks != null
-            ? new T7PcStreamSource(Directory.EnumerateFiles(folder, "*.xpak").Order(StringComparer.OrdinalIgnoreCase).Concat(options.PcStreamXPaks), log)
+        var packageXpaks = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in options.PackageXPaks ?? [])
+        {
+            if (!File.Exists(path))
+                continue;
+            string name = Path.GetFileName(path);
+            if (!packageXpaks.TryGetValue(name, out List<string>? paths))
+                packageXpaks[name] = paths = [];
+            paths.Add(path);
+        }
+
+        IEnumerable<string> sourceXpaks = Directory.EnumerateFiles(folder, "*.xpak");
+        if (packageXpaks.Count > 0)
+            sourceXpaks = sourceXpaks.Concat(packageXpaks.Values.SelectMany(p => p));
+        bool hasStreamSources = options.PcStreamXPaks != null || packageXpaks.Count > 0;
+        using T7PcStreamSource? pcStreams = options.ConvertStreams && hasStreamSources
+            ? new T7PcStreamSource(
+                sourceXpaks.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)
+                    .Concat(options.PcStreamXPaks ?? Array.Empty<string>()),
+                log)
             : null;
 
-        string XPakOf(string zone) => Path.Combine(folder, Path.GetFileNameWithoutExtension(zone) + ".xpak");
+        string PackageFile(string name)
+        {
+            string local = Path.Combine(folder, name);
+            if (File.Exists(local))
+                return local;
+            if (packageXpaks.TryGetValue(name, out List<string>? matches) && matches.Count == 1)
+                return matches[0];
+            return local;
+        }
+
+        string XPakOf(string zone) => PackageFile(Path.GetFileNameWithoutExtension(zone) + ".xpak");
 
         bool HasStreams(string zone) => options.ConvertStreams && File.Exists(XPakOf(zone));
 
         T7ZonePortOptions ZoneOptions(string zone, T7StreamMap shared)
         {
             string zoneStem = Path.GetFileNameWithoutExtension(zone);
-            string indexXPak = Path.Combine(folder, zoneStem + "_d.xpak");
+            string indexXPak = PackageFile(zoneStem + "_d.xpak");
             bool streams = HasStreams(zone);
             return new T7ZonePortOptions
             {
@@ -330,10 +366,17 @@ public static class T7MapPort
         return name.Length > stem.Length + 1 && name.StartsWith(stem + ".", StringComparison.OrdinalIgnoreCase) ? name[(stem.Length + 1)..] : name;
     }
 
-    private static string[] UsermapRoots(string folder) =>
-        Path.GetFileName(folder).Equals("zone", StringComparison.OrdinalIgnoreCase) && Path.GetDirectoryName(folder) is { } parent
-            ? [folder, parent]
-            : [folder];
+    private static string[] UsermapRoots(string folder, string? packageRoot = null)
+    {
+        var roots = new List<string>();
+        if (Path.GetFileName(folder).Equals("zone", StringComparison.OrdinalIgnoreCase) && Path.GetDirectoryName(folder) is { } parent)
+            roots.AddRange([folder, parent]);
+        else
+            roots.Add(folder);
+        if (!string.IsNullOrWhiteSpace(packageRoot))
+            roots.Add(Path.GetFullPath(packageRoot));
+        return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
 
     private static bool IsUsermap(string folder, string[] roots) =>
         roots.Any(root => File.Exists(Path.Combine(root, "workshop.json")))
@@ -476,6 +519,21 @@ public static class T7MapPort
         return names;
     }
 
+    private static string SoundRelativePath(string folder, string bank)
+    {
+        string? current = Path.GetDirectoryName(Path.GetFullPath(bank));
+        while (current != null)
+        {
+            if (Path.GetFileName(current).Equals("snd", StringComparison.OrdinalIgnoreCase))
+                return Path.Combine("snd", Path.GetRelativePath(current, bank));
+            string? parent = Path.GetDirectoryName(current);
+            if (string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = parent;
+        }
+        return Path.GetRelativePath(folder, bank);
+    }
+
     private sealed class SoundPass(T7MapPortOptions options, string folder, IReadOnlyList<string> banks, IReadOnlyList<string> zones, Dictionary<string, string> renames,
         ISet<uint> streamed, List<string> outputs, List<string> problems, List<string> warnings, T7Fidelity fidelity, Lame lame) : IDisposable
     {
@@ -500,7 +558,7 @@ public static class T7MapPort
                 problems.Add($"sound banks not converted: {error.Message}");
                 fidelity.Tracker.Problem($"sound banks not converted: {error.Message}");
                 foreach (string bank in banks)
-                    fidelity.SoundBankFailed(Path.GetRelativePath(folder, bank), null, error.Message);
+                    fidelity.SoundBankFailed(SoundRelativePath(folder, bank), null, error.Message);
                 return null;
             }
             return new SoundPass(options, folder, banks, companions.Zones, renames, streamed, outputs, problems, warnings, fidelity, lame);
@@ -533,11 +591,11 @@ public static class T7MapPort
         }
 
         private double Cost(string bank) =>
-            T7SoundConvert.IsCached(bank, Path.Combine(options.WorkDirectory, Path.GetRelativePath(folder, bank))) ? 0.2 : 1 + SizeMb(bank) * 0.3;
+            T7SoundConvert.IsCached(bank, Path.Combine(options.WorkDirectory, SoundRelativePath(folder, bank))) ? 0.2 : 1 + SizeMb(bank) * 0.3;
 
         private void Convert(string bank)
         {
-            string relative = Path.GetRelativePath(folder, bank);
+            string relative = SoundRelativePath(folder, bank);
             options.Log($"sound bank {relative}");
             fidelity.Enter(T7Fidelity.BankPhase(bank), "Converting sound", relative);
             int? entries = null;

@@ -34,7 +34,7 @@ public partial class MainWindow : Window
     private string _stage = "", _detail = "";
     private bool _updating;
 
-    private const string ForkVersion = "Fork 1.2.1.4";
+    private const string ForkVersion = "Fork 1.2.1.5";
     private const string ForkVersionUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/FORK_VERSION.txt";
     private const string ForkExeUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe";
     private const string ForkHashUrl = "https://github.com/footyhamad/PS4-BO3-Customsme/releases/download/fork-latest/PS4.FF.Porter.exe.sha256";
@@ -263,31 +263,85 @@ public partial class MainWindow : Window
         Job? job = SingleSelectedJob();
         if (job == null || _testing || _running || _clearing)
             return;
-        string path = Path.Combine(Workspace.ReportDirectory, job.Name + ".map-port.json");
+
+        bool isMod = job.PackageFolder is { Length: > 0 };
+        string path = isMod
+            ? Path.Combine(Settings.OutputFor(job), "mod-port.json")
+            : Path.Combine(Workspace.ReportDirectory, job.Name + ".map-port.json");
+        string title = isMod ? "Mod diagnostics" : "Map diagnostics";
         if (!File.Exists(path))
         {
-            SetStatus("No diagnostics yet", "Convert the map first.");
+            SetStatus("No diagnostics yet", isMod ? "Convert the mod first." : "Convert the map first.");
             return;
         }
+
         try
         {
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
             JsonElement root = doc.RootElement;
-            string[] problems = root.TryGetProperty("problems", out JsonElement p) && p.ValueKind == JsonValueKind.Array
-                ? p.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
-            string[] warnings = root.TryGetProperty("warnings", out JsonElement w) && w.ValueKind == JsonValueKind.Array
-                ? w.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
-            var lines = new List<string> { $"Diagnostics: {job.Name}", "", $"Errors / problems: {problems.Length}", $"Warnings: {warnings.Length}", "" };
+            string[] problems = ReadStringArray(root, "problems");
+            string[] warnings = ReadStringArray(root, "warnings");
+            string[] unconverted = isMod ? ReadStringArray(root, "unconverted_files") : [];
+            var lines = new List<string>
+            {
+                $"Diagnostics: {job.Name}",
+                $"Report: {path}",
+                "",
+                $"Errors / problems: {problems.Length}",
+                $"Warnings: {warnings.Length}"
+            };
+
+            if (isMod)
+            {
+                lines.Add($"Unconverted source/sidecar files: {unconverted.Length}");
+                lines.Add("");
+                if (root.TryGetProperty("zones", out JsonElement zones) && zones.ValueKind == JsonValueKind.Array)
+                {
+                    lines.Add("Fastfile groups:");
+                    foreach (JsonElement zone in zones.EnumerateArray())
+                    {
+                        string source = zone.TryGetProperty("source", out JsonElement sourceValue)
+                            ? sourceValue.GetString() ?? sourceValue.ToString() : "(unknown zone)";
+                        bool success = zone.TryGetProperty("success", out JsonElement successValue)
+                            && successValue.ValueKind == JsonValueKind.True;
+                        string statusLine = $"  {(success ? "OK   " : "FAIL ")}{source}";
+                        if (zone.TryGetProperty("fidelity", out JsonElement fidelity) && fidelity.ValueKind == JsonValueKind.Object)
+                        {
+                            string state = fidelity.TryGetProperty("state", out JsonElement stateValue)
+                                ? stateValue.GetString() ?? "unknown" : "unknown";
+                            string grade = fidelity.TryGetProperty("grade", out JsonElement gradeValue)
+                                ? gradeValue.GetString() ?? "unscored" : "unscored";
+                            string percent = fidelity.TryGetProperty("percent", out JsonElement percentValue)
+                                && percentValue.ValueKind == JsonValueKind.Number
+                                ? $"{percentValue.GetInt32()}%" : "—";
+                            statusLine += $" · fidelity {percent} ({grade}, {state})";
+                            if (fidelity.TryGetProperty("headline", out JsonElement headlineValue)
+                                && headlineValue.ValueKind == JsonValueKind.String
+                                && !string.IsNullOrWhiteSpace(headlineValue.GetString()))
+                                lines.Add("      " + headlineValue.GetString());
+                        }
+                        lines.Add(statusLine);
+                    }
+                    lines.Add("");
+                }
+                lines.AddRange(unconverted.Select(x => "UNCONVERTED  " + x));
+            }
+
             lines.AddRange(problems.Select(x => "ERROR  " + x));
             lines.AddRange(warnings.Select(x => "WARN   " + x));
-            MessageBox.Show(this, string.Join(Environment.NewLine, lines.Take(120)), "Map diagnostics", MessageBoxButton.OK,
-                problems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines.Take(120)), title, MessageBoxButton.OK,
+                problems.Length > 0 || unconverted.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
-        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
         {
-            MessageBox.Show(this, $"Could not read diagnostics.\n\n{error.Message}", "Map diagnostics", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, $"Could not read diagnostics.\n\n{error.Message}", title, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
+
+    private static string[] ReadStringArray(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray()
+            : [];
 
     private void HistoryClick(object sender, RoutedEventArgs e)
     {
@@ -314,6 +368,74 @@ public partial class MainWindow : Window
     private void ChangelogClick(object sender, RoutedEventArgs e)
     {
         Process.Start(new ProcessStartInfo("https://github.com/footyhamad/PS4-BO3-Customsme/blob/main/CHANGELOG.md") { UseShellExecute = true });
+    }
+
+    private void OpenModLoaderClick(object sender, RoutedEventArgs e)
+    {
+        var window = new ModLoaderWindow(Settings.GameFolder, AddPaths, AddModPackages, Log.Append) { Owner = this };
+        window.ShowDialog();
+    }
+
+    private void AddModPackages(IEnumerable<string> folders)
+    {
+        if (_running || _clearing || _testing)
+            return;
+
+        string[] packageFolders = folders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        Job? last = null;
+        foreach (string folder in packageFolders)
+        {
+            try
+            {
+                string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+                if (_jobs.Any(j => j.PackageFolder != null && string.Equals(j.PackageFolder, full, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log.Append($"Mod package already queued: {full}");
+                    continue;
+                }
+
+                List<Job> scanned = JobScanner.ScanPackage(full, Log.Append);
+                if (scanned.Count == 0)
+                {
+                    Log.Append($"Skipped mod package '{full}': no readable PC BO3 fastfiles were accepted.");
+                    continue;
+                }
+
+                string name = Path.GetFileName(full);
+                if (_jobs.Any(j => string.Equals(j.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    string parent = Path.GetFileName(Path.GetDirectoryName(full)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) ?? "mod");
+                    name = $"{parent}_{name}";
+                }
+                string uniqueBase = name;
+                int suffix = 2;
+                while (_jobs.Any(j => string.Equals(j.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    name = $"{uniqueBase}_{suffix++}";
+
+                var package = new Job
+                {
+                    Kind = "Mod",
+                    Name = name,
+                    MainFile = scanned[0].MainFile,
+                    PackageFolder = full,
+                    PackageFastFiles = scanned.Sum(j => 1 + j.CompanionZones.Count),
+                    CompanionSummary = "package",
+                    Length = scanned.Sum(j => j.Length),
+                };
+                _jobs.Add(package);
+                last = package;
+                Log.Append($"Queued PC mod package '{full}' as one conversion job ({package.PackageFastFiles} fastfile(s)).");
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                Log.Append($"Could not queue mod package '{folder}': {error.Message}");
+            }
+        }
+
+        if (last != null)
+            JobList.SelectedItem = last;
+        else if (packageFolders.Length > 0)
+            SetStatus("No mod packages queued", "Check the Log for packages that had no readable PC BO3 fastfiles.");
     }
 
     private void AddFilesClick(object sender, RoutedEventArgs e)
@@ -393,7 +515,11 @@ public partial class MainWindow : Window
 
     private List<string> Command(Job job, string workspace)
     {
-        List<string> command = [job.Codename, "convert", job.MainFile, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
+        List<string> command;
+        if (job.PackageFolder is { Length: > 0 } package)
+            command = [job.Codename, "mod-convert", package, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
+        else
+            command = [job.Codename, "convert", job.MainFile, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
         switch (ProfileComboBox.SelectedIndex)
         {
             case 1:

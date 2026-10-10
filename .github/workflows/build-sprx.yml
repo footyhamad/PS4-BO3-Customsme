@@ -2,10 +2,19 @@ name: Build BO3 Customs SPRX and GoldHEN PRX
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/pc-mod-loader-both-surfaces]
     paths:
       - "SPRX/**"
       - ".github/workflows/build-sprx.yml"
+      - "CHANGELOG.md"
+      - "README.md"
+  pull_request:
+    branches: [main]
+    paths:
+      - "SPRX/**"
+      - "Tool/**"
+      - ".github/workflows/build-sprx.yml"
+      - ".github/workflows/build-ff-porter.yml"
       - "CHANGELOG.md"
       - "README.md"
   workflow_dispatch:
@@ -63,6 +72,18 @@ jobs:
           echo "GOLDHEN_SDK=$sdk" >> "$GITHUB_ENV"
           echo "GoldHEN SDK CRT revision: $(git -C "$sdk" rev-parse HEAD)"
 
+      - name: Verify keyboard/mouse subsystem removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e SPRX/t7_kbm.cpp
+          test ! -e SPRX/t7_kbm.hpp
+          test ! -e SPRX/t7_kbm_strings.hpp
+          if grep -R -n -E 'T7Kbm_Install|T7Lua_MouseReady|t7_kbm\.hpp|t7_kbm\.cpp|SceMouse' SPRX --include='*.cpp' --include='*.hpp' --include='Makefile*'; then
+            echo "Keyboard/mouse runtime references remain in SPRX sources." >&2
+            exit 1
+          fi
+
       - name: Build generic OpenOrbis SPRX
         shell: bash
         run: |
@@ -97,6 +118,26 @@ jobs:
           file SPRX/build/goldhen/BO3-Customs.prx
           readelf -h SPRX/build/goldhen/BO3-Customs.elf
 
+      - name: Package in-game UI scripts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p SPRX/build
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+          source = Path("SPRX/ui_scripts")
+          names = ("mapselect.lua", "maptable.lua", "graphics.lua")
+          with ZipFile("SPRX/build/BO3-Customs-UI-Scripts.zip", "w", ZIP_DEFLATED) as archive:
+              for name in names:
+                  path = source / name
+                  if not path.is_file():
+                      raise SystemExit(f"Missing required UI script: {path}")
+                  archive.write(path, f"ui_scripts/{name}")
+          print("Packaged mapselect.lua, maptable.lua, graphics.lua")
+          PY
+
       - name: Upload both builds and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -115,6 +156,7 @@ jobs:
             SPRX/build/goldhen/BO3-Customs.oelf
             SPRX/build/goldhen/BO3-Customs.symbols.txt
             SPRX/build/goldhen/goldhen-build.log
+            SPRX/build/BO3-Customs-UI-Scripts.zip
           if-no-files-found: warn
           retention-days: 30
 

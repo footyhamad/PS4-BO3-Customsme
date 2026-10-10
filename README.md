@@ -21,6 +21,12 @@ Ensure you have **version 1.33** of the game installed on your console (**any re
 Maps can also go on a USB drive or extended storage (`/mnt/usb0-7/`, `/mnt/ext0-7/`), in `BO3-Customs/usermaps/`
 at the root of the drive (a `BO3-Customs/zone/` there works too). Everything else stays in `/data/BO3-Customs/`.
 
+## Desktop Mod Loader
+
+Use the **Mod Loader** button in FF Porter to scan the PC game's `mods` and `usermaps` folders. It inventories fastfiles, XPAKs, sound banks, movies and script/source files; reads available `workshop.json` metadata and declared dependencies; and can export a JSON scan report. Select candidate folders to send them through the existing conversion queue.
+
+The scanner is deliberately conservative: finding PC files does **not** mean a package is compatible with PS4 BO3 1.33. Selecting a **PC mod** queues the whole package as one conversion job, groups language fastfiles, and converts its zones through the existing T7 asset pipeline, including compiled GSC assets embedded in fastfiles, plus matched XPAKs and sound banks. The output includes `mod-port.json`; unmatched sidecars, loose `.gsc/.csc/.lua` source files, and PC-only binaries are listed as unconverted and make the package result fail instead of reporting a false success. This is not automatic translation of arbitrary gameplay behavior. Loose source assets such as raw textures, audio, model source files, or loose scripts are reported as unconverted unless they were already represented inside a convertible fastfile/XPAK. Map candidates continue through the existing map conversion queue. Review the conversion manifest and fidelity reports before copying anything to the console.
+
 ## Console Layout
 ```text
 /data/BO3-Customs/
@@ -28,10 +34,8 @@ at the root of the drive (a `BO3-Customs/zone/` there works too). Everything els
 ├── BO3-Customs.prx    # GoldHEN Plugins system build
 ├── ui_scripts/
 │   ├── graphics.lua
-│   ├── kbm_strings.lua
 │   ├── mapselect.lua
 │   ├── maptable.lua
-│   ├── mouse.lua
 │   └── restart.lua
 ├── lui/
 │   └── ui/

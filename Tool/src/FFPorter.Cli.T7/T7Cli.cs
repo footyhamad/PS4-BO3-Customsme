@@ -26,6 +26,12 @@ public static class T7Cli
                                                  the --pc-reference folder's xpaks unless a PS4 index knows them. Ends with
                                                  the port fidelity table (also written as <map>.fidelity.json); --progress
                                                  also prints "FFPORTER_FIDELITY {json}" snapshots while it runs (the desktop app)
+          mod-convert <mod-folder> -o <folder> [--donors <PS4 zones>] [--pc-reference <PC BO3 zones>] [--ps4-index <xpak folder>]
+                  [--force] [--keep-work] [--donor-all] [--no-xpak] [--no-sound] [--no-fd] [--languages en[,fr...]] [--no-shader-compile]
+                  [--acts <acts.exe>] [--gsc-recompile] [--no-gsc-check] [--no-bundle-streams] [--no-movies] [--progress]
+                                                 convert a whole PC mod folder as one package; groups language fastfiles,
+                                                 converts supported zones and matched sidecars, and writes mod-port.json.
+                                                 Loose source scripts and unmatched/PC-only payloads are reported as unconverted.
           movie <video> [-o <out.mkv>]           list what keeps a movie from playing on PS4; with -o write it PS4-ready
                                                  (copied, or re-encoded to H.264 High 1920x1080 30 fps like retail)
           game-zones <pc zone.ff>                the Black Ops III zone folder a conversion of the zone uses (above the zone,
@@ -72,6 +78,7 @@ public static class T7Cli
                 "pc-walk" => PcWalk(options, stdout, stderr),
                 "relink-identity" => RelinkIdentity(options, stdout, stderr),
                 "convert" => Convert(options, stdout, stderr),
+                "mod-convert" => Convert(options, stdout, stderr, modPackage: true),
                 "movie" => Movie(options, stdout),
                 "xpak-verify" => XPakVerify(options, stdout),
                 "zone-compare" => ZoneCompare(options, stdout, stderr),
@@ -183,14 +190,26 @@ public static class T7Cli
         return result.ExitCode;
     }
 
-    private static int Convert(Options options, TextWriter stdout, TextWriter stderr)
+    private static int Convert(Options options, TextWriter stdout, TextWriter stderr, bool modPackage = false)
     {
-        string input = Path.GetFullPath(options.Positional(0, "pc map.ff"));
+        string input = Path.GetFullPath(options.Positional(0, modPackage ? "PC BO3 mod folder" : "pc map.ff"));
         string output = Path.GetFullPath(options.Required("-o"));
         Workspace workspace = Workspace.Locate(options.Value("--root"));
-        string stem = Path.GetFileNameWithoutExtension(input);
-        string folder = Path.GetDirectoryName(input)!;
-        string work = Path.Combine(T7Paths.Work(workspace), stem);
+        if (modPackage && !Directory.Exists(input))
+            throw new IOException($"Mod package folder does not exist: {input}");
+        if (!modPackage && !File.Exists(input))
+            throw new IOException($"PC fastfile does not exist: {input}");
+        string stem = modPackage
+            ? Path.GetFileName(Path.TrimEndingDirectorySeparator(input))
+            : Path.GetFileNameWithoutExtension(input);
+        string folder = modPackage ? input : Path.GetDirectoryName(input)!;
+        string workName = stem;
+        if (modPackage)
+        {
+            byte[] packagePathHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(input));
+            workName = $"mod-{stem}-{System.Convert.ToHexString(packagePathHash)[..12].ToLowerInvariant()}";
+        }
+        string work = Path.Combine(T7Paths.Work(workspace), workName);
         string loader = T7Paths.Ps4Loader(workspace);
         string image = options.Value("--image") ?? T7Paths.PcImage(workspace);
         if (!File.Exists(image) && !File.Exists(Path.Combine(image, "segments.json")))
@@ -233,21 +252,27 @@ public static class T7Cli
         string? pcReferenceOption = options.Value("--pc-reference");
         if (string.IsNullOrEmpty(pcReferenceOption))
         {
-            pcReferenceOption = T7Paths.FindGameZones(input, out string? found);
+            string referenceProbe = input;
+            if (modPackage)
+                referenceProbe = Directory.EnumerateFiles(input, "*.ff", SearchOption.AllDirectories).FirstOrDefault() ?? input;
+            pcReferenceOption = T7Paths.FindGameZones(referenceProbe, out string? found);
             stdout.WriteLine(pcReferenceOption != null
                 ? $"PC game zones: {pcReferenceOption} ({found})"
                 : "PC game zones: not found (not above the zone, not found with an earlier zone, no Steam install)");
             if (pcReferenceOption == null && donorFiles.Count == 0)
             {
-                const string why = "Black Ops III's game files were not found, and the zone's materials need the game's shaders. "
-                    + "Convert a map or zone from inside the game folder once (its zone folder is remembered), or pass --pc-reference <BO3 zone folder>.";
+                string why = modPackage
+                    ? "Black Ops III's game files were not found, and the mod package's materials need the game's shaders. "
+                        + "Set the PC game folder in FF Porter or pass --pc-reference <BO3 zone folder>."
+                    : "Black Ops III's game files were not found, and the zone's materials need the game's shaders. "
+                        + "Convert a map or zone from inside the game folder once (its zone folder is remembered), or pass --pc-reference <BO3 zone folder>.";
                 stderr.WriteLine(why);
                 fidelity.Tracker.Problem(why);
                 fidelity.Fail();
                 FFPorter.Core.Common.Fidelity.FidelitySnapshot stopped = fidelity.Tracker.Finish(FFPorter.Core.Common.Fidelity.FidelityStates.Failed,
                     "Nothing was converted: Black Ops III's game files (its zone folder) were not found.");
                 WriteFidelity(stopped, stdout);
-                stdout.WriteLine("map conversion FAILED (1 problem)");
+                stdout.WriteLine(modPackage ? "mod conversion FAILED (1 problem)" : "map conversion FAILED (1 problem)");
                 return 1;
             }
         }
@@ -266,6 +291,55 @@ public static class T7Cli
                 : $"technique sets with shaders need PS4 reference zones: {why}");
         }
 
+        string? acts = options.Flag("--no-gsc-check")
+            ? null
+            : options.Value("--acts") ?? options.Value("--gsc-tool") ?? FFPorter.Core.T7.Scripts.ActsInstall.Ensure(workspace, stdout.WriteLine);
+
+        if (modPackage)
+        {
+            var modResult = FFPorter.Core.T7.Port.T7ModPort.Run(new FFPorter.Core.T7.Port.T7ModPortOptions
+            {
+                PackageFolder = input,
+                OutputFolder = output,
+                WorkDirectory = work,
+                Ps4LoaderDirectory = loader,
+                PcImage = image,
+                Donors = donors,
+                Workspace = workspace,
+                Ps4StreamIndex = streamIndex,
+                PcStreamXPaks = pcStreamXPaks,
+                ShaderLibrary = shaders,
+                Acts = acts,
+                GscRecompile = options.Flag("--gsc-recompile"),
+                Force = options.Flag("--force"),
+                DonorFallbackForAllTypes = options.Flag("--donor-all"),
+                ConvertStreams = !options.Flag("--no-xpak"),
+                ConvertSound = !options.Flag("--no-sound"),
+                ConvertMovies = !options.Flag("--no-movies"),
+                ApplyDelta = !options.Flag("--no-fd"),
+                Languages = options.Value("--languages")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                ShaderCompiler = compiler,
+                Log = stdout.WriteLine,
+                FidelityProgress = options.Flag("--progress")
+                    ? snapshot => stdout.WriteLine(FFPorter.Core.Common.Fidelity.FidelityProtocol.Format(snapshot))
+                    : null,
+            });
+            foreach (string problem in modResult.Problems.Take(100))
+                stderr.WriteLine(problem);
+            foreach (string warning in modResult.Warnings)
+                stdout.WriteLine($"warning: {warning}");
+            bool modOk = modResult.Success;
+            stdout.WriteLine(modOk
+                ? $"mod package converted: {modResult.Outputs.Count} files in {output} (report: {modResult.ReportPath})"
+                : $"mod conversion FAILED ({modResult.Problems.Count} problems; report: {modResult.ReportPath})");
+            if (!options.Flag("--keep-work") && modOk && Directory.Exists(work))
+            {
+                foreach (string file in Directory.EnumerateFiles(work, "*.layout.*", SearchOption.AllDirectories))
+                    File.Delete(file);
+            }
+            return modOk ? 0 : 1;
+        }
+
         var result = FFPorter.Core.T7.Port.T7MapPort.Run(new FFPorter.Core.T7.Port.T7MapPortOptions
         {
             PcMapFastFile = input,
@@ -278,7 +352,7 @@ public static class T7Cli
             Ps4StreamIndex = streamIndex,
             PcStreamXPaks = pcStreamXPaks,
             ShaderLibrary = shaders,
-            Acts = options.Flag("--no-gsc-check") ? null : options.Value("--acts") ?? options.Value("--gsc-tool") ?? FFPorter.Core.T7.Scripts.ActsInstall.Ensure(workspace, stdout.WriteLine),
+            Acts = acts,
             GscRecompile = options.Flag("--gsc-recompile"),
             Force = options.Flag("--force"),
             DonorFallbackForAllTypes = options.Flag("--donor-all"),
