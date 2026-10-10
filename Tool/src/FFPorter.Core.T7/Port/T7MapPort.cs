@@ -515,6 +515,21 @@ public static class T7MapPort
         return names;
     }
 
+    private static string SoundRelativePath(string folder, string bank)
+    {
+        string? current = Path.GetDirectoryName(Path.GetFullPath(bank));
+        while (current != null)
+        {
+            if (Path.GetFileName(current).Equals("snd", StringComparison.OrdinalIgnoreCase))
+                return Path.Combine("snd", Path.GetRelativePath(current, bank));
+            string? parent = Path.GetDirectoryName(current);
+            if (string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = parent;
+        }
+        return Path.GetRelativePath(folder, bank);
+    }
+
     private sealed class SoundPass(T7MapPortOptions options, string folder, IReadOnlyList<string> banks, IReadOnlyList<string> zones, Dictionary<string, string> renames,
         ISet<uint> streamed, List<string> outputs, List<string> problems, List<string> warnings, T7Fidelity fidelity, Lame lame) : IDisposable
     {
@@ -539,7 +554,7 @@ public static class T7MapPort
                 problems.Add($"sound banks not converted: {error.Message}");
                 fidelity.Tracker.Problem($"sound banks not converted: {error.Message}");
                 foreach (string bank in banks)
-                    fidelity.SoundBankFailed(Path.GetRelativePath(folder, bank), null, error.Message);
+                    fidelity.SoundBankFailed(SoundRelativePath(folder, bank), null, error.Message);
                 return null;
             }
             return new SoundPass(options, folder, banks, companions.Zones, renames, streamed, outputs, problems, warnings, fidelity, lame);
@@ -572,11 +587,11 @@ public static class T7MapPort
         }
 
         private double Cost(string bank) =>
-            T7SoundConvert.IsCached(bank, Path.Combine(options.WorkDirectory, Path.GetRelativePath(folder, bank))) ? 0.2 : 1 + SizeMb(bank) * 0.3;
+            T7SoundConvert.IsCached(bank, Path.Combine(options.WorkDirectory, SoundRelativePath(folder, bank))) ? 0.2 : 1 + SizeMb(bank) * 0.3;
 
         private void Convert(string bank)
         {
-            string relative = Path.GetRelativePath(folder, bank);
+            string relative = SoundRelativePath(folder, bank);
             options.Log($"sound bank {relative}");
             fidelity.Enter(T7Fidelity.BankPhase(bank), "Converting sound", relative);
             int? entries = null;
