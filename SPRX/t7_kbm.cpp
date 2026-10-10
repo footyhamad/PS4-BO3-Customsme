@@ -427,6 +427,43 @@ constexpr int32_t kSettingAccel       = 2;
 constexpr int32_t kSettingFilter      = 3;
 constexpr int32_t kSettingFreelook    = 4;
 
+
+struct BindSetting
+{
+    const char* dvar;
+    const char* command;
+    int32_t defaultKey;
+};
+
+static const BindSetting k_bindSettings[] =
+{
+    { "bo3customs_bind_forward",       "+forward",          'w' },
+    { "bo3customs_bind_back",          "+back",             's' },
+    { "bo3customs_bind_left",          "+moveleft",         'a' },
+    { "bo3customs_bind_right",         "+moveright",        'd' },
+    { "bo3customs_bind_jump",          "+gostand",          kKeySpace },
+    { "bo3customs_bind_sprint",        "+breath_sprint",    kKeyShift },
+    { "bo3customs_bind_prone",         "toggleprone",       kKeyCtrl },
+    { "bo3customs_bind_interact",      "+activate",         'f' },
+    { "bo3customs_bind_reload",        "+reload",           'r' },
+    { "bo3customs_bind_attack",        "+attack",           kKeyMouse1 },
+    { "bo3customs_bind_aim",           "+toggleads_throw",  kKeyMouse2 },
+    { "bo3customs_bind_melee",         "+melee",            'v' },
+    { "bo3customs_bind_weapon_next",   "weapnext",          kKeyWheelUp },
+    { "bo3customs_bind_weapon_prev",   "weapprev",          kKeyWheelDown },
+    { "bo3customs_bind_inventory",     "+weapnext_inventory",'x' },
+    { "bo3customs_bind_frag",          "+frag",             kKeyMouse3 },
+    { "bo3customs_bind_tactical",      "+smoke",            '4' },
+    { "bo3customs_bind_specialist",    "+weaphero",         'q' },
+    { "bo3customs_bind_slot1",         "+actionslot 1",     '1' },
+    { "bo3customs_bind_slot2",         "+actionslot 2",     '2' },
+    { "bo3customs_bind_slot3",         "+actionslot 3",     '5' },
+    { "bo3customs_bind_slot4",         "+actionslot 4",     '3' },
+    { "bo3customs_bind_scoreboard",    "+scores",           kKeyTab },
+    { "bo3customs_bind_pause",         "pause",             kKeyPause },
+};
+
+
 static const char kCaptureDvar[] = "bo3customs_kbm_capture";
 static const char kResetDvar[]   = "bo3customs_kbm_reset";
 
@@ -500,6 +537,7 @@ static uint32_t g_proneDownAt = 0;
 static uint32_t g_proneReleaseAt = 0;
 static uint32_t g_inputChangedAt[4] = {};
 static char     g_savedSettings[256] = {};
+static int32_t  g_bindSettingKeys[sizeof(k_bindSettings) / sizeof(k_bindSettings[0])] = {};
 
 static uint8_t g_hidToKey[0xE8] = {};
 static uint8_t g_sentAs[256] = {};
@@ -961,6 +999,54 @@ static void ResetBinds()
         g_keyCommand[bind.key] = (uint8_t)FindCommand(bind.command);
 }
 
+
+static int32_t PrimaryKeyForCommand(int32_t command)
+{
+    if (command <= 0)
+        return 0;
+
+    // Prefer an existing stock/default key when it is still bound, then any surviving alias.
+    for (const DefaultBind& bind : k_defaults)
+    {
+        if (FindCommand(bind.command) == command && g_keyCommand[bind.key] == command)
+            return bind.key;
+    }
+
+    for (int32_t key = 1; key < 256; ++key)
+        if (g_keyCommand[key] == command)
+            return key;
+
+    return 0;
+}
+
+static bool ValidBindSettingKey(int32_t key)
+{
+    if (key == 0)
+        return true;
+
+    if (key < 1 || key >= 256 || IsPadKey(key) ||
+        key == kKeyEscape || key == kKeyConsole || key == kKeyBackspace ||
+        (key >= 'A' && key <= 'Z'))
+        return false;
+
+    return true;
+}
+
+static void SyncBindSettingsFromMap()
+{
+    for (size_t i = 0; i < sizeof(k_bindSettings) / sizeof(k_bindSettings[0]); ++i)
+    {
+        const BindSetting& setting = k_bindSettings[i];
+        const int32_t command = FindCommand(setting.command);
+        const int32_t key = PrimaryKeyForCommand(command);
+        g_bindSettingKeys[i] = key;
+
+        char value[16];
+        snprintf(value, sizeof(value), "%d", key);
+        SetDvar(setting.dvar, value);
+    }
+}
+
 static void SettingsSnapshot(char* out, size_t size)
 {
     size_t used = 0;
@@ -1140,6 +1226,16 @@ static void MakeDvars()
 
     if (!FindDvar(kResetDvar))
         SetDvar(kResetDvar, "0");
+
+    for (const BindSetting& setting : k_bindSettings)
+    {
+        if (!FindDvar(setting.dvar))
+        {
+            char value[16];
+            snprintf(value, sizeof(value), "%d", setting.defaultKey);
+            SetDvar(setting.dvar, value);
+        }
+    }
 }
 
 static void ReadSettings()
@@ -1185,6 +1281,73 @@ static void SyncEngineBinds()
 
         if (slot[1] != 0)
             slot[1] = 0;
+    }
+}
+
+
+static void PollBindSettings()
+{
+    for (size_t i = 0; i < sizeof(k_bindSettings) / sizeof(k_bindSettings[0]); ++i)
+    {
+        const BindSetting& setting = k_bindSettings[i];
+        const char* const text = DvarText(setting.dvar);
+        if (!text || !text[0])
+            continue;
+
+        const int32_t wantedKey = (int32_t)ParseNumber(text);
+        const int32_t previousKey = g_bindSettingKeys[i];
+        if (wantedKey == previousKey)
+            continue;
+
+        if (!ValidBindSettingKey(wantedKey))
+        {
+            char previous[16];
+            snprintf(previous, sizeof(previous), "%d", previousKey);
+            SetDvar(setting.dvar, previous);
+            BO3Diag_Log(BO3_DIAG_WARN, "KBM",
+                "ignored invalid key selection dvar=%s value=%d", setting.dvar, wantedKey);
+            continue;
+        }
+
+        const int32_t command = FindCommand(setting.command);
+        if (command <= 0)
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "KBM",
+                "bind setting command lookup failed dvar=%s command=%s", setting.dvar, setting.command);
+            SyncBindSettingsFromMap();
+            continue;
+        }
+
+        if (previousKey > 0 && previousKey < 256 && g_keyCommand[previousKey] == command)
+            g_keyCommand[previousKey] = 0;
+
+        const int32_t displacedCommand = (wantedKey > 0) ? g_keyCommand[wantedKey] : 0;
+        if (wantedKey > 0)
+        {
+            if (displacedCommand > 0 && displacedCommand != command)
+            {
+                BO3Diag_Log(BO3_DIAG_WARN, "KBM",
+                    "key reassigned key=%d displaced_command=%s new_command=%s",
+                    wantedKey, k_commands[displacedCommand].name, k_commands[command].name);
+            }
+            g_keyCommand[wantedKey] = (uint8_t)command;
+        }
+
+        SyncBindSettingsFromMap();
+
+        // Preserve the exact key the user just selected if this command has a secondary/default alias.
+        g_bindSettingKeys[i] = wantedKey;
+        char selected[16];
+        snprintf(selected, sizeof(selected), "%d", wantedKey);
+        SetDvar(setting.dvar, selected);
+
+        SyncEngineBinds();
+        SaveConfig();
+        BO3Diag_Log(BO3_DIAG_INFO, "KBM",
+            "keybinding changed action=%s old_key=%d new_key=%d config=%s",
+            setting.command, previousKey, wantedKey, kConfigPath);
+        PostEvent("options_refresh");
+        return; // apply one UI change per frame; keep other dvar snapshots intact
     }
 }
 
@@ -1563,6 +1726,7 @@ static void PollReset()
 
     SetDvar(kResetDvar, "0");
     ResetBinds();
+    SyncBindSettingsFromMap();
 
     for (const Setting& setting : k_settings)
         SetDvar(setting.dvar, setting.fallback);
@@ -2016,6 +2180,7 @@ static uint64_t InputFrame(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, u
         g_configLoaded = true;
         MakeDvars();
         LoadConfig();
+        SyncBindSettingsFromMap();
         SettingsSnapshot(g_savedSettings, sizeof(g_savedSettings));
         ReadSettings();
         SyncEngineBinds();
@@ -2023,6 +2188,7 @@ static uint64_t InputFrame(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, u
 
     PollCapture();
     PollReset();
+    PollBindSettings();
 
     if (g_capture && !InMenu(lc))
         CancelCapture();

@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.32 (in-game keyboard/mouse binding settings; desktop package remains 1.2.1.4)
+- Added per-action key selections to the existing Mouse/KBM settings list, covering movement, jump, sprint, interaction, combat controls, weapon slots, scoreboard and pause.
+- Added persistent bind dvars synced to `/data/BO3-Customs/kbm.cfg`; changing a key updates engine bindings immediately and moves a conflicting key off its previous action.
+- Left the established loader/entrypoint lifecycle unchanged. GitHub Actions must compile both the generic SPRX and GoldHEN PRX; a PS4 1.33 menu/runtime test is still required.
+
 ## Fork 1.2.1.31 (fix SPRX startup notification timing; desktop package remains 1.2.1.4)
 - Stop sending toast notifications from `module_start`, before global constructor processing or before GoldHEN's normal `plugin_load` callback.
 - Send the generic SPRX startup canary from the initialization worker; keep the GoldHEN canary in `plugin_load`, matching the standard GoldHEN plugin lifecycle.
