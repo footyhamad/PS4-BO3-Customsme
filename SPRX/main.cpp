@@ -120,7 +120,8 @@ uintptr_t WaitForBlackOps3()
     BO3Diag_Log(BO3_DIAG_FATAL, "BOOT",
         "BO3 detection timed out after 100 attempts; last_base=0x%llX; no subsystem hooks were installed",
         (unsigned long long)lastBase);
-    Notify("BO3 Customs SPRX started, but BO3 1.33 was not detected. Check diagnostics.log");
+    // This runs on the initialization worker, not inside the module loader's startup callback.
+    Notify("BO3 Customs started, but BO3 1.33 was not detected. Check diagnostics.log");
     return 0;
 }
 
@@ -169,7 +170,8 @@ extern "C" const char* sceKernelGetFsSandboxRandomWord();
 static void* start_thread(void*)
 {
     const uint64_t initStarted = BO3Diag_UptimeUs();
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "initialization worker entered");
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "initialization worker entered; notification API is now called from worker context");
+    Notify("BO3 Customs %s worker started; checking for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
 
     const uintptr_t base = WaitForBlackOps3();
     if (!base)
@@ -344,7 +346,8 @@ static bool RunCxxInitializers(const char* loaderName)
         BO3Diag_Log(BO3_DIAG_FATAL, "CRT",
             "%s invalid init-array boundaries begin=%p end=%p; refusing constructor traversal",
             loaderName, __init_array_start, __init_array_end);
-        Notify("BO3 Customs: invalid C++ init array; see diagnostics.log");
+        // Do not call the notification API inside module_start: the loader may not
+        // have completed module initialization yet. Persistent logs retain the failure.
         return false;
     }
     uint64_t ctorIndex = 0;
@@ -451,7 +454,7 @@ extern "C"
 __attribute__((visibility("default"))) const char* g_pluginName = "BO3 Customs";
 __attribute__((visibility("default"))) const char* g_pluginDesc = "Black Ops III 1.33 custom map loader";
 __attribute__((visibility("default"))) const char* g_pluginAuth = "BO3 Customsme";
-__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x0102011E; // Fork 1.2.1.30
+__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x0102011F; // Fork 1.2.1.31
 __attribute__((visibility("hidden")))
 #endif
 int module_start(size_t argc, const void* args)
@@ -466,7 +469,8 @@ int module_start(size_t argc, const void* args)
         "generic-OpenOrbis"
 #endif
     );
-    Notify("BO3 Customs %s module_start reached", BO3_CUSTOMS_SPRX_VERSION);
+    // Keep module_start minimal. Generic startup notifications happen on the worker;
+    // the GoldHEN build notifies from plugin_load, after the loader calls back.
 #if defined(BO3_OPENORBIS)
     if (!RunCxxInitializers(
 #if defined(BO3_GOLDHEN_PLUGIN)
@@ -481,8 +485,7 @@ int module_start(size_t argc, const void* args)
     BO3Diag_Log(BO3_DIAG_INFO, "PLUGIN", "module_start complete; waiting for GoldHEN plugin_load callback");
     return 0;
 #else
-    Notify("BO3 Customs SPRX %s C++ init passed; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "generic SPRX startup: waiting for BO3 1.33");
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "generic SPRX C++ initialization passed; starting background workers");
     return StartBackgroundWorkers(true);
 #endif
 }

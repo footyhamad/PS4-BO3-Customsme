@@ -1,5 +1,11 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.31 (fix SPRX startup notification timing; desktop package remains 1.2.1.4)
+- Stop sending toast notifications from `module_start`, before global constructor processing or before GoldHEN's normal `plugin_load` callback.
+- Send the generic SPRX startup canary from the initialization worker; keep the GoldHEN canary in `plugin_load`, matching the standard GoldHEN plugin lifecycle.
+- Keep invalid constructor-array failures in the persistent diagnostic log instead of calling the notification API from the module-entry callback.
+- CI compiles and checks the artifacts, but runtime validation on BO3 1.33 is still required.
+
 ## Fork 1.2.1.30 (fix SPRX release publishing; desktop package remains 1.2.1.4)
 - Give the generic OpenOrbis and GoldHEN build logs distinct asset names. Uploading two files named `build.log` made the rolling-release upload collide and fail with a GitHub 404 after compilation succeeded.
 - Synchronize the GoldHEN plugin metadata and startup version string to 1.2.1.30.
