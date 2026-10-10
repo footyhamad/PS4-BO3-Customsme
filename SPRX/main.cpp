@@ -141,6 +141,15 @@ static void* diagnostics_thread(void*)
 }
 }
 
+#if defined(BO3_OPENORBIS)
+// OpenOrbis crtlib.o normally invokes this array from its own module_start.
+// This fork keeps its custom module entrypoints, so it performs the same initialization explicitly.
+extern "C" {
+extern void (*__init_array_start[])(void);
+extern void (*__init_array_end[])(void);
+}
+#endif
+
 extern "C" const char* sceKernelGetFsSandboxRandomWord();
 
 static void* start_thread(void*)
@@ -311,6 +320,16 @@ extern "C"
 {
 int module_start(size_t argc, const void* args)
 {
+#if defined(BO3_OPENORBIS)
+    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "running OpenOrbis C++ init array begin=%p end=%p",
+        __init_array_start, __init_array_end);
+    for (void (**init)(void) = __init_array_start; init != __init_array_end; ++init)
+    {
+        if (*init)
+            (*init)();
+    }
+    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "OpenOrbis C++ init array complete");
+#endif
     BO3Diag_Init();
     BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_start entered argc=%llu args=%p",
         (unsigned long long)argc, args);

@@ -20,7 +20,7 @@ COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CFLAGS := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -std=c++20 -fno-exceptions -c
-LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
+LDFLAGS := -m elf_x86_64 -pie --allow-multiple-definition --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
 	-L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crtlib.o
 
 C_SOURCES := HDE64.c

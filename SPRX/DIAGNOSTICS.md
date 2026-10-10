@@ -51,3 +51,8 @@ Removed a compatibility macro that incorrectly rewrote `d_fileno` to `d_ino`. Th
 ## OpenOrbis dirent macro fix (Fork 1.2.1.22)
 
 The OpenOrbis compatibility header now undefines a `d_fileno` macro inherited from its directory headers because it rewrote the native `struct dirent` member to an unavailable `d_ino` member.
+
+
+## OpenOrbis CRT entrypoints (Fork 1.2.1.23)
+
+The OpenOrbis linker includes `crtlib.o`, which also defines `module_start` and `module_stop`. The link now allows duplicate CRT entrypoint symbols so the project's entrypoints (listed before `crtlib.o`) remain selected. The project's `module_start` explicitly runs the OpenOrbis `__init_array_start` to `__init_array_end` constructors before startup, matching the initialization work that the CRT wrapper normally performs. Verify the resulting binary and runtime on a BO3 1.33 PS4.

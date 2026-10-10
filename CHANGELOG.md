@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.23 (fix OpenOrbis CRT entrypoint collision; desktop package remains 1.2.1.4)
+- Resolved duplicate `module_start`/`module_stop` definitions between the SPRX and OpenOrbis `crtlib.o` while keeping the project handlers first in link order.
+- Added explicit OpenOrbis init-array execution at the start of the selected custom `module_start`, preserving C++ static initialization before launching the worker threads.
+
 ## Fork 1.2.1.22 (fix OpenOrbis dirent macro rewrite; desktop package remains 1.2.1.4)
 - Explicitly undefined the OpenOrbis libc `d_fileno` macro that rewrote directory-entry member access to the missing `d_ino` field.
 

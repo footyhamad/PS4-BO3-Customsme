@@ -52,3 +52,8 @@ Fork 1.2.1.21 removes an unnecessary `d_fileno` macro fallback because the OpenO
 
 
 Fork 1.2.1.22 undefines the `d_fileno` compatibility macro in the OpenOrbis shim so the map scan compiles against the native directory-entry member used by this SDK.
+
+
+## CRT entrypoint handling (Fork 1.2.1.23)
+
+OpenOrbis v0.5.4's `crtlib.o` provides its own hidden `module_start` and `module_stop` symbols. This fork's build allows the duplicates, with application objects ordered first; the custom `module_start` explicitly walks the SDK-provided init array before launching the SPRX's worker threads. This avoids losing C++ static initialization while retaining the custom shutdown handler. A successful link must still be verified on console.
