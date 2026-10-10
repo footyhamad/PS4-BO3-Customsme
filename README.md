@@ -14,7 +14,9 @@ Ensure you have **version 1.33** of the game installed on your console (**any re
 2. Next now place the SPRX wherever you wish, perferably in `/data/BO3-Customs/`.
 3. Run the tool, drag and drop a steam map into the tool and then wait for it to finish.
 4. Copy the converted map into `/data/BO3-Customs/usermaps/` however you may wish.
-5. Finally then just launch the game and load the SPRX with you perfered method.
+5. Finally, launch the game and load the appropriate build for your loader:
+   - **GoldHEN Plugins system:** use `BO3-Customs.prx` from the SPRX rolling release and add it to `/data/GoldHEN/plugins/` plus `/data/GoldHEN/plugins.ini`.
+   - **A loader that directly starts generic SPRX module entrypoints:** use `BO3-Customs.sprx`.
 
 Maps can also go on a USB drive or extended storage (`/mnt/usb0-7/`, `/mnt/ext0-7/`), in `BO3-Customs/usermaps/`
 at the root of the drive (a `BO3-Customs/zone/` there works too). Everything else stays in `/data/BO3-Customs/`.
@@ -22,7 +24,8 @@ at the root of the drive (a `BO3-Customs/zone/` there works too). Everything els
 ## Console Layout
 ```text
 /data/BO3-Customs/
-├── BO3-Customs.sprx
+├── BO3-Customs.sprx   # generic SPRX loader
+├── BO3-Customs.prx    # GoldHEN Plugins system build
 ├── ui_scripts/
 │   ├── graphics.lua
 │   ├── kbm_strings.lua
@@ -66,11 +69,9 @@ at the root of the drive (a `BO3-Customs/zone/` there works too). Everything els
 
 ## Building Requirements
 
-**The SPRX**
-- VS 2022
-- PS4 SDK 12.00
-- .NET 10.0 SDK
-- Python 3
+**Open-source builds**
+- OpenOrbis PS4 Toolchain v0.5.4, Clang/LLD 18, Make and Python 3.
+- The workflow also builds a GoldHEN Plugins-compatible `.prx` using the official GoldHEN Plugin SDK CRT; see `SPRX/BUILD-OPENORBIS.md`.
 
 
 ## Credits

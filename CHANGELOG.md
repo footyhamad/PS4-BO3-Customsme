@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.27 (GoldHEN plugin loader compatibility; desktop package remains 1.2.1.4)
+- Add a separate GoldHEN Plugins-compatible .prx using the official GoldHEN plugin CRT and exporting plugin_load/plugin_unload with plugin metadata; retain the generic OpenOrbis .sprx for loaders that call module_start.
+- Make GoldHEN module_start initialize C++ globals and return to the loader; defer BO3 detection, notifications and hook installation to plugin_load instead of blocking the loader's entrypoint.
+- Add post-link checks for the GoldHEN plugin callbacks and the _init ELF entrypoint. Console runtime still requires testing on BO3 1.33.
+
 ## Fork 1.2.1.26 (SPRX entrypoint/constructor isolation; desktop package remains 1.2.1.4)
 - Initialize and persist diagnostics, then emit an entrypoint-canary notification before running OpenOrbis C++ global constructors.
 - Log the init-array bounds and each constructor before/after execution, and emit a second notification when constructor traversal completes; this distinguishes a module-entry failure from a constructor hang before the next PS4 test.

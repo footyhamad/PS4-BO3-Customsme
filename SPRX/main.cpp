@@ -29,6 +29,9 @@ volatile int g_diagnosticMapCount = -1;
 uint64_t g_frameCallCount = 0;
 ScePthread g_diagnosticsThread{};
 bool g_diagnosticsThreadCreated = false;
+ScePthread g_initThread{};
+volatile bool g_initThreadCreated = false;
+volatile bool g_cancelInitialization = false;
 
 using Hook_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                             double, double, double, double, double, double, double, double);
@@ -80,11 +83,21 @@ uintptr_t WaitForBlackOps3()
 
     for (int attempt = 0; attempt < 100; ++attempt)
     {
+        if (__atomic_load_n(&g_cancelInitialization, __ATOMIC_ACQUIRE))
+        {
+            BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "BO3 detection cancelled before hooks were installed");
+            return 0;
+        }
         const uintptr_t base = (uintptr_t)GetBaseAddress();
         lastBase = base;
 
         if (base && IsBlackOps3(base))
         {
+            if (__atomic_load_n(&g_cancelInitialization, __ATOMIC_ACQUIRE))
+            {
+                BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "BO3 detected during cancellation; aborting before hooks");
+                return 0;
+            }
             __atomic_store_n(&g_gameBase, base, __ATOMIC_RELEASE);
             BO3Diag_Log(BO3_DIAG_INFO, "BOOT",
                 "BO3 title probe matched base=0x%llX attempt=%d elapsed_ms=%llu",
@@ -317,110 +330,191 @@ static void* start_thread(void*)
     return nullptr;
 }
 
-extern "C"
-{
-int module_start(size_t argc, const void* args)
-{
-    // This is deliberately before C++ global constructors: if init_array is the
-    // failure point, we still need a persisted breadcrumb and a visible canary.
-    BO3Diag_Init();
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT",
-        "module_start entered before C++ init argc=%llu args=%p",
-        (unsigned long long)argc, args);
-    Notify("BO3 Customs SPRX %s entered module_start; C++ init next", BO3_CUSTOMS_SPRX_VERSION);
-
 #if defined(BO3_OPENORBIS)
+static bool RunCxxInitializers(const char* loaderName)
+{
     const uintptr_t ctorStart = (uintptr_t)__init_array_start;
     const uintptr_t ctorEnd = (uintptr_t)__init_array_end;
     BO3Diag_Log(BO3_DIAG_INFO, "CRT",
-        "OpenOrbis init array begin=%p end=%p entries=%llu",
-        __init_array_start, __init_array_end,
+        "%s init array begin=%p end=%p entries=%llu",
+        loaderName, __init_array_start, __init_array_end,
         ctorEnd >= ctorStart ? (unsigned long long)((ctorEnd - ctorStart) / sizeof(void*)) : 0ull);
     if (ctorEnd < ctorStart || ((ctorEnd - ctorStart) % sizeof(void*)) != 0)
     {
         BO3Diag_Log(BO3_DIAG_FATAL, "CRT",
-            "invalid init-array boundaries begin=%p end=%p; refusing constructor traversal",
-            __init_array_start, __init_array_end);
-        Notify("BO3 Customs SPRX: invalid C++ init array; see diagnostics.log");
-        return -1;
+            "%s invalid init-array boundaries begin=%p end=%p; refusing constructor traversal",
+            loaderName, __init_array_start, __init_array_end);
+        Notify("BO3 Customs: invalid C++ init array; see diagnostics.log");
+        return false;
     }
-
     uint64_t ctorIndex = 0;
     for (void (**init)(void) = __init_array_start; init != __init_array_end; ++init, ++ctorIndex)
     {
         if (!*init)
         {
-            BO3Diag_Log(BO3_DIAG_WARN, "CRT", "constructor index=%llu is null; skipped",
-                (unsigned long long)ctorIndex);
+            BO3Diag_Log(BO3_DIAG_WARN, "CRT", "%s constructor index=%llu is null; skipped",
+                loaderName, (unsigned long long)ctorIndex);
             continue;
         }
-
-        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "calling constructor index=%llu address=%p",
-            (unsigned long long)ctorIndex, (void*)*init);
+        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "%s calling constructor index=%llu address=%p",
+            loaderName, (unsigned long long)ctorIndex, (void*)*init);
         (*init)();
-        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "constructor returned index=%llu address=%p",
-            (unsigned long long)ctorIndex, (void*)*init);
+        BO3Diag_Log(BO3_DIAG_INFO, "CRT", "%s constructor returned index=%llu address=%p",
+            loaderName, (unsigned long long)ctorIndex, (void*)*init);
     }
-    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "OpenOrbis C++ init array complete entries=%llu",
-        (unsigned long long)ctorIndex);
-    Notify("BO3 Customs SPRX %s C++ init passed; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
+    BO3Diag_Log(BO3_DIAG_INFO, "CRT", "%s init array complete entries=%llu",
+        loaderName, (unsigned long long)ctorIndex);
+    return true;
+}
 #endif
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "startup phase: waiting for BO3 1.33");
 
-    g_diagnosticsThreadCreated = false;
+static int StartBackgroundWorkers(bool waitForInitialization)
+{
+    __atomic_store_n(&g_cancelInitialization, false, __ATOMIC_RELEASE);
     __atomic_store_n(&g_monitorRunning, true, __ATOMIC_RELEASE);
-    const int monitorRc = scePthreadCreate(&g_diagnosticsThread, nullptr, diagnostics_thread, nullptr,
-        "BO3-Customs Diag");
-    if (monitorRc == 0)
+    if (!g_diagnosticsThreadCreated)
     {
-        g_diagnosticsThreadCreated = true;
-        BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "diagnostics monitor thread created successfully");
+        const int monitorRc = scePthreadCreate(&g_diagnosticsThread, nullptr, diagnostics_thread, nullptr,
+            "BO3-Customs Diag");
+        if (monitorRc == 0)
+        {
+            g_diagnosticsThreadCreated = true;
+            BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "diagnostics monitor thread created successfully");
+        }
+        else
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "BOOT", "diagnostics monitor thread creation failed rc=0x%08X",
+                (uint32_t)monitorRc);
+        }
     }
-    else
+    if (__atomic_load_n(&g_initThreadCreated, __ATOMIC_ACQUIRE))
     {
-        BO3Diag_Log(BO3_DIAG_ERROR, "BOOT", "diagnostics monitor thread creation failed rc=0x%08X",
-            (uint32_t)monitorRc);
+        BO3Diag_Log(BO3_DIAG_WARN, "BOOT", "initialization worker already launched; duplicate launch rejected");
+        return 0;
     }
-
-    ScePthread thread{};
-    const int createRc = scePthreadCreate(&thread, nullptr, start_thread, nullptr, "BO3-Customs Init");
+    const int createRc = scePthreadCreate(&g_initThread, nullptr, start_thread, nullptr, "BO3-Customs Init");
     if (createRc != 0)
     {
         SetPhase(kPhaseFailed);
         BO3Diag_Log(BO3_DIAG_FATAL, "BOOT", "initialization thread creation failed rc=0x%08X",
             (uint32_t)createRc);
-        __atomic_store_n(&g_monitorRunning, false, __ATOMIC_RELEASE);
-        if (g_diagnosticsThreadCreated)
-        {
-            scePthreadJoin(g_diagnosticsThread, nullptr);
-            g_diagnosticsThreadCreated = false;
-        }
         return createRc;
     }
-
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "initialization thread created; waiting for initialization result");
-    const int joinRc = scePthreadJoin(thread, nullptr);
+    __atomic_store_n(&g_initThreadCreated, true, __ATOMIC_RELEASE);
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "initialization thread created wait=%s",
+        waitForInitialization ? "yes" : "no");
+    if (!waitForInitialization)
+        return 0;
+    const int joinRc = scePthreadJoin(g_initThread, nullptr);
+    __atomic_store_n(&g_initThreadCreated, false, __ATOMIC_RELEASE);
     BO3Diag_Log(joinRc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "BOOT",
         "initialization thread join returned rc=0x%08X", (uint32_t)joinRc);
     return joinRc;
 }
 
-int module_stop(size_t argc, const void* args)
+static int StopBackgroundWorkers(bool refuseIfGameDetected)
 {
+    // Hook trampolines and callbacks reside inside this module; unloading after
+    // executable discovery could leave BO3 calling unmapped module code.
+    const uintptr_t base = __atomic_load_n(&g_gameBase, __ATOMIC_ACQUIRE);
+    if (refuseIfGameDetected && base)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "PLUGIN",
+            "unload refused: BO3 was detected at base=0x%llX; hooks may reference this module. Exit BO3 before unloading.",
+            (unsigned long long)base);
+        Notify("BO3 Customs: exit BO3 before unloading this plugin");
+        return -1;
+    }
+    __atomic_store_n(&g_cancelInitialization, true, __ATOMIC_RELEASE);
     SetPhase(kPhaseStopping);
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_stop entered argc=%llu args=%p",
-        (unsigned long long)argc, args);
-
     __atomic_store_n(&g_monitorRunning, false, __ATOMIC_RELEASE);
+    if (__atomic_load_n(&g_initThreadCreated, __ATOMIC_ACQUIRE))
+    {
+        const int joinRc = scePthreadJoin(g_initThread, nullptr);
+        __atomic_store_n(&g_initThreadCreated, false, __ATOMIC_RELEASE);
+        BO3Diag_Log(joinRc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "BOOT",
+            "initialization worker join on stop returned rc=0x%08X", (uint32_t)joinRc);
+    }
     if (g_diagnosticsThreadCreated)
     {
         const int joinRc = scePthreadJoin(g_diagnosticsThread, nullptr);
         g_diagnosticsThreadCreated = false;
         BO3Diag_Log(joinRc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "BOOT",
-            "diagnostics monitor join returned rc=0x%08X", (uint32_t)joinRc);
+            "diagnostics monitor join on stop returned rc=0x%08X", (uint32_t)joinRc);
     }
-
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_stop complete");
     return 0;
+}
+
+extern "C"
+{
+#if defined(BO3_GOLDHEN_PLUGIN)
+__attribute__((visibility("default"))) const char* g_pluginName = "BO3 Customs";
+__attribute__((visibility("default"))) const char* g_pluginDesc = "Black Ops III 1.33 custom map loader";
+__attribute__((visibility("default"))) const char* g_pluginAuth = "BO3 Customsme";
+__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x0102011B; // Fork 1.2.1.27
+__attribute__((visibility("hidden")))
+#endif
+int module_start(size_t argc, const void* args)
+{
+    BO3Diag_Init();
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT",
+        "module_start entered argc=%llu args=%p build=%s",
+        (unsigned long long)argc, args,
+#if defined(BO3_GOLDHEN_PLUGIN)
+        "GoldHEN-plugin"
+#else
+        "generic-OpenOrbis"
+#endif
+    );
+    Notify("BO3 Customs %s module_start reached", BO3_CUSTOMS_SPRX_VERSION);
+#if defined(BO3_OPENORBIS)
+    if (!RunCxxInitializers(
+#if defined(BO3_GOLDHEN_PLUGIN)
+        "GoldHEN"
+#else
+        "OpenOrbis"
+#endif
+    ))
+        return -1;
+#endif
+#if defined(BO3_GOLDHEN_PLUGIN)
+    BO3Diag_Log(BO3_DIAG_INFO, "PLUGIN", "module_start complete; waiting for GoldHEN plugin_load callback");
+    return 0;
+#else
+    Notify("BO3 Customs SPRX %s C++ init passed; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "generic SPRX startup: waiting for BO3 1.33");
+    return StartBackgroundWorkers(true);
+#endif
+}
+
+#if defined(BO3_GOLDHEN_PLUGIN)
+__attribute__((visibility("default"))) int32_t plugin_load(int32_t argc, const char* argv[])
+{
+    BO3Diag_Init();
+    BO3Diag_Log(BO3_DIAG_INFO, "PLUGIN",
+        "GoldHEN plugin_load callback entered argc=%d argv=%p", argc, argv);
+    Notify("BO3 Customs %s GoldHEN plugin loaded; checking BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
+    return StartBackgroundWorkers(false);
+}
+
+__attribute__((visibility("default"))) int32_t plugin_unload(int32_t argc, const char* argv[])
+{
+    BO3Diag_Log(BO3_DIAG_WARN, "PLUGIN",
+        "GoldHEN plugin_unload callback entered argc=%d argv=%p", argc, argv);
+    return StopBackgroundWorkers(true);
+}
+#endif
+
+#if defined(BO3_GOLDHEN_PLUGIN)
+__attribute__((visibility("hidden")))
+#endif
+int module_stop(size_t argc, const void* args)
+{
+    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_stop entered argc=%llu args=%p",
+        (unsigned long long)argc, args);
+    const int rc = StopBackgroundWorkers(true);
+    BO3Diag_Log(rc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "BOOT", "module_stop complete rc=0x%08X",
+        (uint32_t)rc);
+    return rc;
 }
 }
