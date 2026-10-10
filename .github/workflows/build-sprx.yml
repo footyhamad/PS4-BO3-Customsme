@@ -72,6 +72,18 @@ jobs:
           echo "GOLDHEN_SDK=$sdk" >> "$GITHUB_ENV"
           echo "GoldHEN SDK CRT revision: $(git -C "$sdk" rev-parse HEAD)"
 
+      - name: Verify keyboard/mouse subsystem removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e SPRX/t7_kbm.cpp
+          test ! -e SPRX/t7_kbm.hpp
+          test ! -e SPRX/t7_kbm_strings.hpp
+          if grep -R -n -E 'T7Kbm_Install|T7Lua_MouseReady|t7_kbm\.hpp|t7_kbm\.cpp|SceMouse' SPRX --include='*.cpp' --include='*.hpp' --include='Makefile*'; then
+            echo "Keyboard/mouse runtime references remain in SPRX sources." >&2
+            exit 1
+          fi
+
       - name: Build generic OpenOrbis SPRX
         shell: bash
         run: |
