@@ -25,7 +25,7 @@ at the root of the drive (a `BO3-Customs/zone/` there works too). Everything els
 
 Use the **Mod Loader** button in FF Porter to scan the PC game's `mods` and `usermaps` folders. It inventories fastfiles, XPAKs, sound banks, movies and script/source files; reads available `workshop.json` metadata and declared dependencies; and can export a JSON scan report. Select candidate folders to send them through the existing conversion queue.
 
-The scanner is deliberately conservative: finding PC files does **not** mean a package is compatible with PS4 BO3 1.33. Generic PC gameplay/script mods may need porting work that the map conversion pipeline cannot automatically perform. Review conversion output and fidelity reports before copying anything to the console.
+The scanner is deliberately conservative: finding PC files does **not** mean a package is compatible with PS4 BO3 1.33. Selecting a **PC mod** queues the whole package as one conversion job, groups language fastfiles, and converts its zones through the existing T7 asset pipeline, including compiled GSC assets embedded in fastfiles, plus matched XPAKs and sound banks. The output includes `mod-port.json`; unmatched sidecars, loose `.gsc/.csc/.lua` source files, and PC-only binaries are listed as unconverted and make the package result fail instead of reporting a false success. This is not automatic translation of arbitrary gameplay behavior. Map candidates continue through the existing map conversion queue. Review the conversion manifest and fidelity reports before copying anything to the console.
 
 ## Console Layout
 ```text

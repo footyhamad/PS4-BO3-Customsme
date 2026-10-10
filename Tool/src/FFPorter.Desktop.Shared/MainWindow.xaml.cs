@@ -318,8 +318,70 @@ public partial class MainWindow : Window
 
     private void OpenModLoaderClick(object sender, RoutedEventArgs e)
     {
-        var window = new ModLoaderWindow(Settings.GameFolder, AddPaths, Log.Append) { Owner = this };
+        var window = new ModLoaderWindow(Settings.GameFolder, AddPaths, AddModPackages, Log.Append) { Owner = this };
         window.ShowDialog();
+    }
+
+    private void AddModPackages(IEnumerable<string> folders)
+    {
+        if (_running || _clearing || _testing)
+            return;
+
+        string[] packageFolders = folders.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        Job? last = null;
+        foreach (string folder in packageFolders)
+        {
+            try
+            {
+                string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+                if (_jobs.Any(j => j.PackageFolder != null && string.Equals(j.PackageFolder, full, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Log.Append($"Mod package already queued: {full}");
+                    continue;
+                }
+
+                List<Job> scanned = JobScanner.Scan([full], Log.Append);
+                if (scanned.Count == 0)
+                {
+                    Log.Append($"Skipped mod package '{full}': no readable PC BO3 fastfiles were accepted.");
+                    continue;
+                }
+
+                string name = Path.GetFileName(full);
+                if (_jobs.Any(j => string.Equals(j.Name, name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    string parent = Path.GetFileName(Path.GetDirectoryName(full)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) ?? "mod");
+                    name = $"{parent}_{name}";
+                }
+                string uniqueBase = name;
+                int suffix = 2;
+                while (_jobs.Any(j => string.Equals(j.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    name = $"{uniqueBase}_{suffix++}";
+
+                var package = new Job
+                {
+                    Kind = "Mod",
+                    Name = name,
+                    MainFile = scanned[0].MainFile,
+                    PackageFolder = full,
+                    PackageFastFiles = scanned.Sum(j => 1 + j.CompanionZones.Count),
+                    CompanionSummary = "package",
+                    Length = scanned.Sum(j => j.Length),
+                };
+                _jobs.Add(package);
+                last = package;
+                Log.Append($"Queued PC mod package '{full}' as one conversion job ({package.PackageFastFiles} fastfile(s)).");
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                Log.Append($"Could not queue mod package '{folder}': {error.Message}");
+            }
+        }
+
+        if (last != null)
+            JobList.SelectedItem = last;
+        else if (packageFolders.Length > 0)
+            SetStatus("No mod packages queued", "Check the Log for packages that had no readable PC BO3 fastfiles.");
     }
 
     private void AddFilesClick(object sender, RoutedEventArgs e)
@@ -399,7 +461,11 @@ public partial class MainWindow : Window
 
     private List<string> Command(Job job, string workspace)
     {
-        List<string> command = [job.Codename, "convert", job.MainFile, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
+        List<string> command;
+        if (job.PackageFolder is { Length: > 0 } package)
+            command = [job.Codename, "mod-convert", package, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
+        else
+            command = [job.Codename, "convert", job.MainFile, "-o", Settings.OutputFor(job), "--force", "--progress", "--root", workspace];
         switch (ProfileComboBox.SelectedIndex)
         {
             case 1:

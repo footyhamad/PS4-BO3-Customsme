@@ -17,13 +17,15 @@ internal sealed class ModLoaderWindow : Window
     private readonly TextBlock _status;
     private readonly TextBox _details;
     private readonly Action<IEnumerable<string>> _queuePaths;
+    private readonly Action<IEnumerable<string>> _queueMods;
     private readonly Action<string> _log;
     private string? _root;
 
-    public ModLoaderWindow(string? gameFolder, Action<IEnumerable<string>> queuePaths, Action<string> log)
+    public ModLoaderWindow(string? gameFolder, Action<IEnumerable<string>> queuePaths, Action<IEnumerable<string>> queueMods, Action<string> log)
     {
         _root = gameFolder;
         _queuePaths = queuePaths;
+        _queueMods = queueMods;
         _log = log;
 
         Title = "PC Mod Loader";
@@ -43,7 +45,7 @@ internal sealed class ModLoaderWindow : Window
         });
         header.Children.Add(new TextBlock
         {
-            Text = "Scan PC BO3 mods and usermaps, inspect their files and dependencies, then queue candidate fastfiles for the existing PS4 conversion pipeline.",
+            Text = "Scan PC BO3 mods and usermaps. Mod packages are converted as one package; map candidates continue through the existing map conversion path.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 0, 0)
         });
@@ -471,9 +473,20 @@ internal sealed class ModLoaderWindow : Window
             return;
         }
 
-        _queuePaths(selected.Select(m => m.Path).ToArray());
-        _status.Text = $"Queued {selected.Length} candidate folder(s). Check the conversion queue and fidelity report; discovery does not imply PS4 compatibility.";
-        _log($"Mod Loader: queued {selected.Length} selected candidate folder(s) for the existing conversion pipeline.");
+        ModCandidate[] selectedMods = selected
+            .Where(m => m.Category.Equals("PC mod", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        ModCandidate[] selectedMaps = selected
+            .Where(m => !m.Category.Equals("PC mod", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (selectedMods.Length > 0)
+            _queueMods(selectedMods.Select(m => m.Path).ToArray());
+        if (selectedMaps.Length > 0)
+            _queuePaths(selectedMaps.Select(m => m.Path).ToArray());
+
+        _status.Text = $"Queued {selectedMods.Length} mod package(s) and {selectedMaps.Length} map candidate(s). Conversion reports identify any source assets that remain unconverted.";
+        _log($"Mod Loader: queued {selectedMods.Length} PC mod package(s) for package conversion and {selectedMaps.Length} map candidate(s) for map conversion.");
     }
 
     private sealed class ModCandidate

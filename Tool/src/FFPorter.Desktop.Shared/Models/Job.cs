@@ -11,6 +11,8 @@ public sealed class Job : Observable
     public required string Kind { get; init; }
     public required string Name { get; init; }
     public required string MainFile { get; init; }
+    public string? PackageFolder { get; init; }
+    public int PackageFastFiles { get; init; }
     public IReadOnlyList<string> CompanionZones { get; init; } = [];
     public string CompanionSummary { get; init; } = "";
     public int Streams { get; init; }
@@ -32,6 +34,8 @@ public sealed class Job : Observable
         get
         {
             var parts = new List<string> { $"{GameName} {Kind.ToLowerInvariant()}" };
+            if (PackageFolder is { Length: > 0 })
+                parts.Add($"{PackageFastFiles} package fastfile(s)");
             if (CompanionZones.Count > 0 && CompanionSummary.Length > 0)
                 parts.Add(CompanionSummary);
             if (Streams > 0)
