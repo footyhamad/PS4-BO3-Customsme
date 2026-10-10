@@ -83,9 +83,19 @@ public static class T7ModPort
                 schema_version = 1,
                 package = source,
                 output,
+                success = problems.Count == 0,
+                generated_utc = DateTimeOffset.UtcNow,
                 scanned_files = files.Select(p => Path.GetRelativePath(source, p)).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
                 scan_truncated = scanTruncated,
                 zones = zoneReports,
+                summary = new
+                {
+                    fastfile_groups = zoneReports.Count,
+                    output_files = outputs.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    unconverted_files = unconverted.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    problems = problems.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    warnings = warnings.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                },
                 outputs = outputs.Distinct(StringComparer.OrdinalIgnoreCase).Select(p => Path.GetRelativePath(output, p)).Order(StringComparer.OrdinalIgnoreCase).ToArray(),
                 unconverted_files = unconverted.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                 problems = problems.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -225,6 +235,25 @@ public static class T7ModPort
                 outputs = result.Outputs.Select(p => Path.GetRelativePath(output, p)).ToArray(),
                 problems = result.Problems,
                 warnings = result.Warnings,
+                fidelity = result.Fidelity is { } snapshot
+                    ? new
+                    {
+                        state = snapshot.State,
+                        percent = snapshot.Percent,
+                        grade = snapshot.Grade,
+                        headline = snapshot.Headline,
+                        dimensions = snapshot.Dimensions.Select(d => new
+                        {
+                            name = d.Name,
+                            percent = d.Percent,
+                            grade = d.Grade,
+                            units = d.Units,
+                            summary = d.Summary,
+                            notes = d.Notes.Select(n => new { grade = n.Grade, text = n.Text }).ToArray(),
+                        }).ToArray(),
+                        problems = snapshot.Problems,
+                    }
+                    : null,
             });
         }
 

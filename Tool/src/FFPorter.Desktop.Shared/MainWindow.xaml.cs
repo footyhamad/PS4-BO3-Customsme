@@ -304,7 +304,23 @@ public partial class MainWindow : Window
                             ? sourceValue.GetString() ?? sourceValue.ToString() : "(unknown zone)";
                         bool success = zone.TryGetProperty("success", out JsonElement successValue)
                             && successValue.ValueKind == JsonValueKind.True;
-                        lines.Add($"  {(success ? "OK   " : "FAIL ")}{source}");
+                        string statusLine = $"  {(success ? "OK   " : "FAIL ")}{source}";
+                        if (zone.TryGetProperty("fidelity", out JsonElement fidelity) && fidelity.ValueKind == JsonValueKind.Object)
+                        {
+                            string state = fidelity.TryGetProperty("state", out JsonElement stateValue)
+                                ? stateValue.GetString() ?? "unknown" : "unknown";
+                            string grade = fidelity.TryGetProperty("grade", out JsonElement gradeValue)
+                                ? gradeValue.GetString() ?? "unscored" : "unscored";
+                            string percent = fidelity.TryGetProperty("percent", out JsonElement percentValue)
+                                && percentValue.ValueKind == JsonValueKind.Number
+                                ? $"{percentValue.GetInt32()}%" : "—";
+                            statusLine += $" · fidelity {percent} ({grade}, {state})";
+                            if (fidelity.TryGetProperty("headline", out JsonElement headlineValue)
+                                && headlineValue.ValueKind == JsonValueKind.String
+                                && !string.IsNullOrWhiteSpace(headlineValue.GetString()))
+                                lines.Add("      " + headlineValue.GetString());
+                        }
+                        lines.Add(statusLine);
                     }
                     lines.Add("");
                 }
