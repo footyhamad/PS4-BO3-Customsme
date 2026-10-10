@@ -14,7 +14,7 @@ typedef struct _GHSDK_Detour
     bool Installed;
 } Detour;
 
-void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** OutStub);
+void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** OutStub, const char* Name = nullptr);
 void Detour_Detach(Detour* This);
 
 void* Detour_AllocNear(uint64_t Anchor);

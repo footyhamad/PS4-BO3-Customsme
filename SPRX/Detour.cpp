@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 
 #define VM_PROT_ALL (PROT_READ | PROT_WRITE | PROT_EXEC)
 
@@ -240,51 +241,63 @@ static bool Detour_InRel32Range(uint64_t From, uint64_t To)
     return Displacement >= INT32_MIN && Displacement <= INT32_MAX;
 }
 
-static bool Detour_WriteVerified(void* Address, const uint8_t* Bytes, size_t Size)
+static bool Detour_WriteVerified(const char* Stage, void* Address, const uint8_t* Bytes, size_t Size)
 {
-    sceKernelMprotect(Address, Size, VM_PROT_ALL);
-    memcpy(Address, Bytes, Size);
-
-    if (memcmp(Address, Bytes, Size) != 0)
+    const int protect = sceKernelMprotect(Address, Size, VM_PROT_ALL);
+    if (protect < 0)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR",
+            "write stage=%s failed mprotect_rc=0x%08X address=0x%llX size=0x%llX",
+            Stage ? Stage : "unknown", (uint32_t)protect, (unsigned long long)(uintptr_t)Address,
+            (unsigned long long)Size);
         return false;
-
+    }
+    memcpy(Address, Bytes, Size);
+    if (memcmp(Address, Bytes, Size) != 0)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR",
+            "write stage=%s failed verification address=0x%llX size=0x%llX",
+            Stage ? Stage : "unknown", (unsigned long long)(uintptr_t)Address, (unsigned long long)Size);
+        return false;
+    }
     return true;
 }
 
-void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** OutStub)
+void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** OutStub, const char* Name)
 {
+    const char* hookName = (Name && Name[0]) ? Name : "unnamed";
     if (OutStub)
         *OutStub = 0;
-
     if (!This || !FunctionPtr || !HookPtr)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR",
+            "attach rejected name=%s detour=%p target=0x%llX hook=%p reason=invalid argument",
+            hookName, This, (unsigned long long)FunctionPtr, HookPtr);
         return 0;
-
+    }
     if (This->Installed)
     {
-
-        if (OutStub)
-            *OutStub = This->StubPtr;
-
+        if (OutStub) *OutStub = This->StubPtr;
+        BO3Diag_Log(BO3_DIAG_INFO, "DETOUR", "already installed name=%s target=0x%llX stub=%p",
+            hookName, (unsigned long long)FunctionPtr, This->StubPtr);
         return This->StubPtr;
     }
 
-    {
-        static uint64_t hooked[96];
-        static int hookedCount = 0;
-
-        for (int i = 0; i < hookedCount; ++i)
+    // Only successful installations reserve a target address.
+    static uint64_t hooked[128];
+    static size_t hookedCount = 0;
+    for (size_t i = 0; i < hookedCount; ++i)
+        if (hooked[i] == FunctionPtr)
         {
-            if (hooked[i] != FunctionPtr)
-                continue;
-
+            BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR",
+                "attach rejected name=%s target=0x%llX reason=already hooked by another Detour",
+                hookName, (unsigned long long)FunctionPtr);
             return 0;
         }
 
-        if (hookedCount < (int)(sizeof(hooked) / sizeof(hooked[0])))
-            hooked[hookedCount++] = FunctionPtr;
-    }
-
     memset(This, 0, sizeof(*This));
+    BO3Diag_Log(BO3_DIAG_INFO, "DETOUR", "attach begin name=%s target=0x%llX hook=%p",
+        hookName, (unsigned long long)FunctionPtr, HookPtr);
 
     DetourReloc Relocs[DETOUR_MAX_PATCH];
     size_t RelocCount = 0;
@@ -301,18 +314,28 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
             Relocs, DETOUR_MAX_PATCH, &RelocCount);
 
         if (PatchSize < DETOUR_JMP32_SIZE)
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "attach failed name=%s target=0x%llX reason=unsafe instruction decode",
+                hookName, (unsigned long long)FunctionPtr);
             return 0;
+        }
     }
 
     void* MapPtr = Detour_MapNear(FunctionPtr, DETOUR_MAP_SIZE);
-
     if (!MapPtr)
     {
-        int res = sceKernelMmap(0, DETOUR_MAP_SIZE, VM_PROT_ALL, 0x1000 | 0x2, -1, 0, &MapPtr);
-
-        if (res < 0 || MapPtr == 0)
+        BO3Diag_Log(BO3_DIAG_WARN, "DETOUR", "near mapping failed name=%s target=0x%llX; fallback mmap",
+            hookName, (unsigned long long)FunctionPtr);
+        const int res = sceKernelMmap(0, DETOUR_MAP_SIZE, VM_PROT_ALL, 0x1000 | 0x2, -1, 0, &MapPtr);
+        if (res < 0 || !MapPtr)
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "mmap failed name=%s rc=0x%08X map=%p",
+                hookName, (uint32_t)res, MapPtr);
             return 0;
+        }
     }
+    BO3Diag_Log(BO3_DIAG_INFO, "DETOUR", "trampoline allocated name=%s target=0x%llX map=%p",
+        hookName, (unsigned long long)FunctionPtr, MapPtr);
 
     uint8_t* Stub = (uint8_t*)MapPtr;
     uint8_t* JumpBack = Stub + PatchSize;
@@ -323,6 +346,8 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
 
     if (!Absolute && !DirectRel32 && !BridgeReachable)
     {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "relative jump and bridge unreachable name=%s target=0x%llX",
+            hookName, (unsigned long long)FunctionPtr);
         sceKernelMunmap(MapPtr, DETOUR_MAP_SIZE);
         return 0;
     }
@@ -345,6 +370,10 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
 
         if (NewDisp < INT32_MIN || NewDisp > INT32_MAX)
         {
+            BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR",
+                "relocation out of range name=%s target=0x%llX insn=0x%llX delta=%lld",
+                hookName, (unsigned long long)FunctionPtr,
+                (unsigned long long)(FunctionPtr + Relocs[i].Offset), (long long)NewDisp);
             sceKernelMunmap(MapPtr, DETOUR_MAP_SIZE);
             return 0;
         }
@@ -356,15 +385,17 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
     uint8_t JumpBytes[DETOUR_JMP64_SIZE];
 
     Detour_BuildJump(JumpBytes, (uint64_t)JumpBack, FunctionPtr + PatchSize, true);
-    if (!Detour_WriteVerified(JumpBack, JumpBytes, DETOUR_JMP64_SIZE))
+    if (!Detour_WriteVerified("trampoline-jump-back", JumpBack, JumpBytes, DETOUR_JMP64_SIZE))
     {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "jump-back write failed name=%s", hookName);
         sceKernelMunmap(MapPtr, DETOUR_MAP_SIZE);
         return 0;
     }
 
     Detour_BuildJump(JumpBytes, (uint64_t)Bridge, (uint64_t)HookPtr, true);
-    if (!Detour_WriteVerified(Bridge, JumpBytes, DETOUR_JMP64_SIZE))
+    if (!Detour_WriteVerified("hook-bridge", Bridge, JumpBytes, DETOUR_JMP64_SIZE))
     {
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "bridge write failed name=%s", hookName);
         sceKernelMunmap(MapPtr, DETOUR_MAP_SIZE);
         return 0;
     }
@@ -380,11 +411,12 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
     if (OutStub)
         *OutStub = Stub;
 
-    if (!Detour_WriteVerified((void*)FunctionPtr, Patch, PatchSize))
+    if (!Detour_WriteVerified("function-patch", (void*)FunctionPtr, Patch, PatchSize))
     {
-        if (OutStub)
-            *OutStub = 0;
-
+        if (OutStub) *OutStub = 0;
+        Detour_WriteVerified("function-patch-rollback", (void*)FunctionPtr, This->Original, PatchSize);
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "function patch failed name=%s target=0x%llX; rollback attempted",
+            hookName, (unsigned long long)FunctionPtr);
         sceKernelMunmap(MapPtr, DETOUR_MAP_SIZE);
         return 0;
     }
@@ -396,7 +428,16 @@ void* Detour_Attach(Detour* This, uint64_t FunctionPtr, void* HookPtr, void** Ou
     This->MapSize = DETOUR_MAP_SIZE;
     This->PatchSize = PatchSize;
     This->Installed = true;
+    if (hookedCount < sizeof(hooked) / sizeof(hooked[0]))
+        hooked[hookedCount++] = FunctionPtr;
+    else
+        BO3Diag_Log(BO3_DIAG_WARN, "DETOUR", "successful hook registry full target=0x%llX",
+            (unsigned long long)FunctionPtr);
 
+    BO3Diag_Log(BO3_DIAG_INFO, "DETOUR",
+        "attach success name=%s target=0x%llX hook=%p stub=%p patch_size=0x%llX jump=%s",
+        hookName, (unsigned long long)FunctionPtr, HookPtr, Stub, (unsigned long long)PatchSize,
+        Absolute ? "absolute" : (DirectRel32 ? "rel32-direct" : "rel32-bridge"));
     return Stub;
 }
 
@@ -405,7 +446,11 @@ void Detour_Detach(Detour* This)
     if (!This || !This->Installed)
         return;
 
-    Detour_WriteVerified(This->FunctionPtr, This->Original, This->PatchSize);
+    BO3Diag_Log(BO3_DIAG_INFO, "DETOUR", "detach begin target=%p hook=%p patch_size=0x%llX",
+        This->FunctionPtr, This->HookPtr, (unsigned long long)This->PatchSize);
+    const bool restored = Detour_WriteVerified("detach-restore", This->FunctionPtr, This->Original, This->PatchSize);
+    if (!restored)
+        BO3Diag_Log(BO3_DIAG_ERROR, "DETOUR", "detach failed to restore target=%p", This->FunctionPtr);
 
     sceKernelUsleep(20000);
 
