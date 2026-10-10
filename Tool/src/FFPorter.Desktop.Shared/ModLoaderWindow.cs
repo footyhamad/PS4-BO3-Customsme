@@ -176,12 +176,6 @@ internal sealed class ModLoaderWindow : Window
     {
         string full = Path.GetFullPath(root);
         string leaf = Path.GetFileName(full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (Directory.Exists(Path.Combine(full, "zone")) || Directory.Exists(Path.Combine(full, "zone".ToUpperInvariant())))
-        {
-            yield return (full, "Folder");
-            yield break;
-        }
-
         string? directCategory = leaf.Equals("mods", StringComparison.OrdinalIgnoreCase) ? "Mod"
             : leaf.Equals("usermaps", StringComparison.OrdinalIgnoreCase) ? "Map" : null;
         if (directCategory != null)
@@ -191,14 +185,21 @@ internal sealed class ModLoaderWindow : Window
             yield break;
         }
 
+        bool foundContainers = false;
         foreach (string categoryName in new[] { "mods", "usermaps" })
         {
             string container = Path.Combine(full, categoryName);
             if (!Directory.Exists(container))
                 continue;
+            foundContainers = true;
             foreach (string child in SafeDirectories(container))
                 yield return (child, categoryName.Equals("mods", StringComparison.OrdinalIgnoreCase) ? "Mod" : "Map");
         }
+        if (foundContainers)
+            yield break;
+
+        if (Directory.Exists(Path.Combine(full, "zone")) || Directory.EnumerateFiles(full, "*.ff", SearchOption.TopDirectoryOnly).Any())
+            yield return (full, "Folder");
     }
 
     private static IReadOnlyList<string> SafeDirectories(string root)
