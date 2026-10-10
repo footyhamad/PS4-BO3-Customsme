@@ -6,6 +6,15 @@ on:
     paths:
       - "Tool/**"
       - ".github/workflows/build-ff-porter.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "SPRX/**"
+      - "Tool/**"
+      - ".github/workflows/build-sprx.yml"
+      - ".github/workflows/build-ff-porter.yml"
+      - "CHANGELOG.md"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
