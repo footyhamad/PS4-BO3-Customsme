@@ -60,7 +60,7 @@ internal sealed class ModLoaderWindow : Window
         footer.Children.Add(_status);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var chooseMaps = new Button { Content = "Select map candidates", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var chooseMaps = new Button { Content = "Select map candidates", Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 8, 0) };
         chooseMaps.Click += (_, _) =>
         {
             foreach (ModCandidate candidate in _mods)
@@ -69,7 +69,7 @@ internal sealed class ModLoaderWindow : Window
         };
         buttons.Children.Add(chooseMaps);
 
-        var clearSelection = new Button { Content = "Clear selection", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var clearSelection = new Button { Content = "Clear selection", Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 8, 0) };
         clearSelection.Click += (_, _) =>
         {
             foreach (ModCandidate candidate in _mods)
@@ -78,23 +78,23 @@ internal sealed class ModLoaderWindow : Window
         };
         buttons.Children.Add(clearSelection);
 
-        var export = new Button { Content = "Export report…", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var export = new Button { Content = "Export report…", Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 8, 0) };
         export.Click += (_, _) => ExportReport();
         buttons.Children.Add(export);
 
-        var openFolder = new Button { Content = "Open selected folder", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var openFolder = new Button { Content = "Open selected folder", Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 8, 0) };
         openFolder.Click += (_, _) => OpenSelectedFolder();
         buttons.Children.Add(openFolder);
 
-        var choose = new Button { Content = "Choose PC folder…", Padding = new Thickness(12, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var choose = new Button { Content = "Choose PC folder…", Padding = new Thickness(12, 7, 12, 7), Margin = new Thickness(0, 0, 8, 0) };
         choose.Click += (_, _) => ChooseRoot();
         buttons.Children.Add(choose);
 
-        var scan = new Button { Content = "Rescan", Padding = new Thickness(16, 7), Margin = new Thickness(0, 0, 8, 0) };
+        var scan = new Button { Content = "Rescan", Padding = new Thickness(16, 7, 16, 7), Margin = new Thickness(0, 0, 8, 0) };
         scan.Click += (_, _) => Scan();
         buttons.Children.Add(scan);
 
-        var queue = new Button { Content = "Queue selected for conversion", Padding = new Thickness(14, 7) };
+        var queue = new Button { Content = "Queue selected for conversion", Padding = new Thickness(14, 7, 14, 7) };
         queue.Click += (_, _) => QueueSelected();
         buttons.Children.Add(queue);
         footer.Children.Add(buttons);
