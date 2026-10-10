@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.17 (make OpenOrbis build independent of bundled kernel helper; desktop package remains 1.2.1.4)
+- Excluded `libjbc.cpp` from the OpenOrbis source list and guarded its sandbox-mount calls from that build, avoiding its conflicting raw `getcwd` syscall wrapper and omitting kernel credential/memory helper code.
+- Logged the OpenOrbis external-drive-mount limitation at startup and documented that local custom maps remain supported; the Sony SDK/Visual Studio source path is unchanged.
+
 ## Fork 1.2.1.16 (fix OpenOrbis libc++ and debug output declarations; desktop package remains 1.2.1.4)
 - Declared the POSIX nanosleep interface before libc++ threading headers and separated the OpenOrbis debug-output symbol from the original Sony-SDK function-pointer shim.
 - Routed OpenOrbis fallback diagnostics through the public kernel debug-output API without changing the Sony SDK path.

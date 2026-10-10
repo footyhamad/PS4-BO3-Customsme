@@ -32,3 +32,8 @@ The build should produce SPRX/build/openorbis/BO3-Customs.sprx and a SHA-256 fil
 ## Important validation note
 
 A successful link proves that the sources compile against OpenOrbis, not that every proprietary SDK ABI or PS4 runtime behavior is identical. The OpenOrbis mouse header currently omits full mouse prototypes, so this project supplies isolated declarations in openorbis_compat/. Install and test the result only on a controlled PS4 running BO3 1.33; specifically verify mouse/keyboard input, map loading, UI hooks and the persistent diagnostics log. Do not treat a build artifact alone as proof of runtime stability.
+
+
+## OpenOrbis security/feature boundary
+
+The OpenOrbis Makefile excludes `libjbc.cpp`, which contains a bundled kernel credential/memory helper incompatible with the OpenOrbis host headers. The OpenOrbis binary therefore does not include that helper, and startup logs explicitly report that automatic external-drive sandbox mounts are disabled. Local custom-map discovery remains enabled; external roots must already be mounted and visible to the process. The original Visual Studio/Sony SDK project is left unchanged.

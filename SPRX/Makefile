@@ -24,7 +24,7 @@ LDFLAGS := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
 	-L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crtlib.o
 
 C_SOURCES := HDE64.c
-CPP_SOURCES := $(wildcard *.cpp)
+CPP_SOURCES := $(filter-out libjbc.cpp,$(wildcard *.cpp))
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES)) \
 	$(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
 

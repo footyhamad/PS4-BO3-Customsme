@@ -182,6 +182,11 @@ static void* start_thread(void*)
         "console sandbox probe path=%s open_rc=0x%08X detected_platform=%s",
         path, (uint32_t)fd, is_ps5 ? "PS5-layout-marker-found; drive mounting skipped" : "PS5-layout-marker-not-found; attempting drive mounts");
 
+#if defined(BO3_OPENORBIS)
+    BO3Diag_Log(BO3_DIAG_WARN, "STORAGE",
+        "OpenOrbis build excludes the bundled kernel credential/memory helper; automatic external-drive sandbox mounts are disabled. "
+        "Local /data/BO3-Customs remains enabled; external roots must already be visible in this process sandbox.");
+#else
     if (!is_ps5)
     {
         for (const char* const drive : k_driveRoots)
@@ -208,6 +213,7 @@ static void* start_thread(void*)
                 mnt, sandboxPath, (uint32_t)mountRc, mountRc == 0 ? "OK" : "FAILED_OR_ALREADY_MOUNTED");
         }
     }
+#endif
 
     SetPhase(kPhaseInstallingHooks);
     BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "subsystem initialization begin base=0x%llX",

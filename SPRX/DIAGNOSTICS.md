@@ -21,3 +21,8 @@ Debug builds still create the older `/data/BO3-Customs/log.txt` for extra stack/
 Open the log and inspect the final records. Find the latest `[ERROR]` or `[FATAL]`; the adjacent `[BUILD]`, `[DETOUR]`, `[MAPS]`, `[IMAGES]`, `[LUA]` and `[KBM]` records should tell you which signature or hook failed. The heartbeat is produced by a separate monitor thread. `frame_state=stalled/no-frame-progress` means the main frame hook had been installed and frame calls then stopped advancing for at least ten seconds. If every heartbeat stops, the process may have terminated or the diagnostics thread itself may have stopped.
 
 This is persistent crash-triage logging, **not a native PS4 crash dump**. If the OS terminates the process without running module shutdown code, the SPRX cannot write a post-crash call stack. No other BO3 version is supported: failed 1.33 preflight must leave fixed-offset hooks and patches disabled.
+
+
+## OpenOrbis build limitation (Fork 1.2.1.17)
+
+The OpenOrbis build intentionally omits the bundled `libjbc.cpp` kernel credential/memory helper. Automatic USB/extended-drive sandbox mounting is therefore disabled in that build and a warning is written at startup. Maps under the accessible local `/data/BO3-Customs` path remain supported. External roots are scanned only if they are already visible inside the process sandbox. The existing Sony SDK/Visual Studio project continues to use its original source list; test that path separately.
