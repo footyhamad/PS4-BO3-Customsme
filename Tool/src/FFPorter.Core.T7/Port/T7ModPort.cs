@@ -46,6 +46,14 @@ public static class T7ModPort
     private static readonly HashSet<string> MovieExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".mkv", ".mp4", ".mov", ".avi", ".webm" };
 
+    private static readonly HashSet<string> LooseAssetExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".iwi", ".dds", ".tga", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff",
+        ".wav", ".mp3", ".flac", ".ogg", ".wem", ".bnk",
+        ".ma", ".mb", ".fbx", ".obj", ".lwo", ".xmodel_export", ".xanim_export", ".atr",
+        ".gdt", ".zone", ".menu", ".csv", ".str", ".iwd", ".zip", ".7z", ".rar"
+    };
+
     public static T7ModPortResult Run(T7ModPortOptions options)
     {
         string source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(options.PackageFolder));
@@ -238,8 +246,11 @@ public static class T7ModPort
             }
         }
 
-        var producedNames = outputs.Where(File.Exists).Select(Path.GetFileName)
+        var producedPaths = outputs.Where(File.Exists)
+            .Select(path => NormalizeRelative(Path.GetRelativePath(output, path)))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool Produced(string relative) => producedPaths.Contains(NormalizeRelative(relative));
+
         foreach (string file in files)
         {
             string extension = Path.GetExtension(file);
@@ -247,7 +258,7 @@ public static class T7ModPort
             {
                 if (rejectedFastfiles.Contains(file) || IsFilteredLanguage(file, pcSet, options.Languages))
                     continue;
-                if (!producedNames.Contains(Path.GetFileName(file)))
+                if (!Produced(Path.GetFileName(file)))
                     AddUnconverted(file, "no PS4 fastfile was produced for this zone");
                 continue;
             }
@@ -266,18 +277,25 @@ public static class T7ModPort
             {
                 if (IsFilteredLanguageBank(file, options.Languages))
                     continue;
-                if (!producedNames.Contains(Path.GetFileName(file)))
+                string expected = extension.Equals(".sabl", StringComparison.OrdinalIgnoreCase)
+                    || extension.Equals(".sabs", StringComparison.OrdinalIgnoreCase)
+                    ? SoundOutputRelative(source, file)
+                    : Path.GetFileName(file);
+                if (expected == null || !Produced(expected))
                     AddUnconverted(file, "sidecar payload was not converted; check its matching fastfile and conversion options");
                 continue;
             }
 
             if (MovieExtensions.Contains(extension))
             {
-                string expected = Path.GetFileNameWithoutExtension(file) + ".mkv";
-                if (!producedNames.Contains(expected))
-                    AddUnconverted(file, "movie was not prepared for the PS4 package (the existing map/movie path only converts movies recognized as usermap content)");
+                string expected = Path.Combine("video", Path.GetFileNameWithoutExtension(file) + ".mkv");
+                if (!Produced(expected))
+                    AddUnconverted(file, "movie was not prepared for this package; only movies discovered by the package conversion path count as converted");
                 continue;
             }
+
+            if (LooseAssetExtensions.Contains(extension))
+                AddUnconverted(file, "loose PC source/resource file was not compiled or injected into a PS4 fastfile/XPAK");
 
             if (extension.Equals(".dll", StringComparison.OrdinalIgnoreCase)
                 || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
@@ -297,6 +315,26 @@ public static class T7ModPort
             unconverted.Add(text);
             options.Log("UNCONVERTED " + text);
         }
+    }
+
+    private static string NormalizeRelative(string path) =>
+        path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+
+    private static string? SoundOutputRelative(string sourceRoot, string file)
+    {
+        string root = Path.GetFullPath(sourceRoot);
+        string full = Path.GetFullPath(file);
+        string? current = Path.GetDirectoryName(full);
+        while (current != null && IsWithin(current, root))
+        {
+            if (Path.GetFileName(current).Equals("snd", StringComparison.OrdinalIgnoreCase))
+                return NormalizeRelative(Path.Combine("snd", Path.GetRelativePath(current, full)));
+            string? parent = Path.GetDirectoryName(current);
+            if (parent == current)
+                break;
+            current = parent;
+        }
+        return null;
     }
 
     private static T7Header ReadHeader(string path)
