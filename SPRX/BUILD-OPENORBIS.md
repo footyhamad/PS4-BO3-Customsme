@@ -62,7 +62,7 @@ The mod does not safely detach every installed game hook. Its plugin unload call
 
 Both open-source builds omit libjbc.cpp kernel credential/memory helper because it is not compatible with OpenOrbis userland headers. Automatic USB/extended-drive sandbox mounts are disabled in these builds. Local custom map discovery under /data/BO3-Customs remains enabled. External roots are scanned only when they are already visible inside the process sandbox.
 
-The OpenOrbis mouse header also does not provide every Sony SDK mouse prototype used by this project, so isolated compatibility declarations remain in openorbis_compat/.
+The current build no longer links or calls the Sony mouse SDK; the legacy keyboard/mouse subsystem has been removed.
 
 ## Diagnostics
 
