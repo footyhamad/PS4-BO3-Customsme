@@ -303,9 +303,12 @@ internal sealed class ModLoaderWindow : Window
             }
         }
 
+        // Discovery from the explicit mods/ container wins over filename heuristics:
+        // a mod can legitimately ship fastfiles named zm_* or mp_*.
+        bool explicitMod = category.Equals("Mod", StringComparison.OrdinalIgnoreCase);
         bool mapLike = category.Equals("Map", StringComparison.OrdinalIgnoreCase)
-            || fastfiles.Any(p => Path.GetFileNameWithoutExtension(p).StartsWith("zm_", StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileNameWithoutExtension(p).StartsWith("mp_", StringComparison.OrdinalIgnoreCase));
+            || (!explicitMod && fastfiles.Any(p => Path.GetFileNameWithoutExtension(p).StartsWith("zm_", StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileNameWithoutExtension(p).StartsWith("mp_", StringComparison.OrdinalIgnoreCase)));
         string status = mapLike
             ? "Map-like fastfiles; conversion can still reject unsupported assets"
             : "PC mod fastfiles; generic gameplay/script mods are not automatically portable";
