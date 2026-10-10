@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 #include "t7_lua.hpp"
 #include "t7_maps.hpp"
 
@@ -588,26 +589,47 @@ static void SaveGraphics()
 
 static const uint8_t k_frameLimitSkip[] = { 0x84, 0xC0, 0x74, 0x20, 0xB8, 0xE8, 0x03, 0x00, 0x00 };
 
-static void PatchFrameLimit()
+static bool PatchFrameLimit()
 {
     const uintptr_t at = g_base + kFrameLimitSkip;
     const size_t size = sizeof(k_frameLimitSkip);
-
     if (!RangeReadable(at, size))
-        return;
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "frame-limit patch range unreadable offset=+0x%llX", (unsigned long long)kFrameLimitSkip);
+        return false;
+    }
 
     const uint8_t* const code = (const uint8_t*)at;
-    const bool around = memcmp(code, k_frameLimitSkip, 2) == 0 && memcmp(code + 4, k_frameLimitSkip + 4, size - 4) == 0;
-
+    const bool around = memcmp(code, k_frameLimitSkip, 2) == 0 &&
+                        memcmp(code + 4, k_frameLimitSkip + 4, size - 4) == 0;
+    if (around && code[2] == 0x90 && code[3] == 0x90)
+    {
+        BO3Diag_Log(BO3_DIAG_INFO, "LUA", "frame-limit patch already applied");
+        return true;
+    }
     if (!around || code[2] != 0x74 || code[3] != 0x20)
-        return;
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA",
+            "frame-limit signature mismatch offset=+0x%llX expected branch=74 20 actual=%02X %02X",
+            (unsigned long long)kFrameLimitSkip, code[2], code[3]);
+        return false;
+    }
 
     const uintptr_t page = (at + 2) & ~0x3FFFull;
-
-    if (sceKernelMprotect((const void*)page, ((at + 3) & ~0x3FFFull) - page + 0x4000, 7) < 0)
-        return;
+    const int protect = sceKernelMprotect((const void*)page, ((at + 3) & ~0x3FFFull) - page + 0x4000, 7);
+    if (protect < 0)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "frame-limit mprotect failed rc=0x%08X page=0x%llX",
+            (uint32_t)protect, (unsigned long long)page);
+        return false;
+    }
 
     *(volatile uint16_t*)(at + 2) = 0x9090;
+    const bool verified = code[2] == 0x90 && code[3] == 0x90;
+    BO3Diag_Log(verified ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA",
+        "frame-limit patch %s offset=+0x%llX", verified ? "applied and verified" : "write verification FAILED",
+        (unsigned long long)kFrameLimitSkip);
+    return verified;
 }
 
 static const uint8_t k_splitNarrow[] = { 0x83, 0xF8, 0x01, 0x75, 0x28, 0xC7, 0x05, 0xEB,
@@ -622,26 +644,57 @@ static void FillSplitRow(float* row, float y, float h)
     }
 }
 
-static void PatchSplitScreen()
+static bool PatchSplitScreen()
 {
     const uintptr_t at = g_base + kSplitNarrow;
     const size_t size = sizeof(k_splitNarrow);
+    if (!RangeReadable(at, size))
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "split-screen patch range unreadable offset=+0x%llX", (unsigned long long)kSplitNarrow);
+        return false;
+    }
 
-    if (!RangeReadable(at, size) || memcmp((const void*)at, k_splitNarrow, size) != 0)
-        return;
+    const uint8_t* const code = (const uint8_t*)at;
+    const bool expected = memcmp(code, k_splitNarrow, size) == 0;
+    const bool alreadyPatched = memcmp(code, k_splitNarrow, 3) == 0 && code[3] == 0xEB &&
+                                memcmp(code + 4, k_splitNarrow + 4, size - 4) == 0;
+    if (!expected && !alreadyPatched)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA",
+            "split-screen signature mismatch offset=+0x%llX expected_branch=%02X actual=%02X",
+            (unsigned long long)kSplitNarrow, k_splitNarrow[3], code[3]);
+        return false;
+    }
 
-    const uintptr_t page = (at + 3) & ~0x3FFFull;
-
-    if (sceKernelMprotect((const void*)page, 0x4000, 7) < 0)
-        return;
-
-    *(volatile uint8_t*)(at + 3) = 0xEB;
+    if (!alreadyPatched)
+    {
+        const uintptr_t page = (at + 3) & ~0x3FFFull;
+        const int protect = sceKernelMprotect((const void*)page, 0x4000, 7);
+        if (protect < 0)
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "split-screen mprotect failed rc=0x%08X page=0x%llX",
+                (uint32_t)protect, (unsigned long long)page);
+            return false;
+        }
+        *(volatile uint8_t*)(at + 3) = 0xEB;
+        if (code[3] != 0xEB)
+        {
+            BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "split-screen patch verification FAILED offset=+0x%llX",
+                (unsigned long long)kSplitNarrow);
+            return false;
+        }
+        BO3Diag_Log(BO3_DIAG_INFO, "LUA", "split-screen branch patch applied and verified offset=+0x%llX",
+            (unsigned long long)kSplitNarrow);
+    }
+    else
+        BO3Diag_Log(BO3_DIAG_INFO, "LUA", "split-screen patch already present offset=+0x%llX", (unsigned long long)kSplitNarrow);
 
     float* const wide = (float*)(g_base + kSplitLayouts) + 64;
-
     FillSplitRow(wide + 16, 0.0f, 0.5f);
     FillSplitRow(wide + 20, 0.5f, 0.5f);
     FillSplitRow(wide + 40, 0.5f, 0.5f);
+    BO3Diag_Log(BO3_DIAG_INFO, "LUA", "split-screen layout pass complete offset=+0x%llX", (unsigned long long)kSplitLayouts);
+    return true;
 }
 
 static const uint8_t k_viewValues[] = { 0x55, 0x48, 0x89, 0xE5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55,
@@ -753,19 +806,29 @@ static uint64_t ViewValues(uint64_t localClient, uint64_t a2, uint64_t a3, uint6
     return result;
 }
 
-static void HookView()
+static bool HookView()
 {
     const uintptr_t at = g_base + kViewValues;
+    const bool viewMatch = RangeReadable(at, sizeof(k_viewValues)) && memcmp((const void*)at, k_viewValues, sizeof(k_viewValues)) == 0;
+    const bool tanMatch = RangeReadable(g_base + kTanf, sizeof(k_importStub)) &&
+                          memcmp((const void*)(g_base + kTanf), k_importStub, sizeof(k_importStub)) == 0;
+    const bool atanMatch = RangeReadable(g_base + kAtanf, sizeof(k_importStub)) &&
+                           memcmp((const void*)(g_base + kAtanf), k_importStub, sizeof(k_importStub)) == 0;
 
-    const bool matches = RangeReadable(at, sizeof(k_viewValues)) &&
-                         memcmp((const void*)at, k_viewValues, sizeof(k_viewValues)) == 0 &&
-                         RangeReadable(g_base + kTanf, sizeof(k_importStub)) &&
-                         memcmp((const void*)(g_base + kTanf), k_importStub, sizeof(k_importStub)) == 0 &&
-                         RangeReadable(g_base + kAtanf, sizeof(k_importStub)) &&
-                         memcmp((const void*)(g_base + kAtanf), k_importStub, sizeof(k_importStub)) == 0;
+    BO3Diag_Log(viewMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA", "ViewValues signature offset=+0x%llX %s",
+        (unsigned long long)kViewValues, viewMatch ? "MATCH" : "MISMATCH");
+    BO3Diag_Log(tanMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA", "tanf import signature offset=+0x%llX %s",
+        (unsigned long long)kTanf, tanMatch ? "MATCH" : "MISMATCH");
+    BO3Diag_Log(atanMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA", "atanf import signature offset=+0x%llX %s",
+        (unsigned long long)kAtanf, atanMatch ? "MATCH" : "MISMATCH");
+    if (!viewMatch || !tanMatch || !atanMatch)
+        return false;
 
-    if (matches)
-        Detour_Attach(&g_viewDetour, (uint64_t)at, (void*)ViewValues, &g_viewOriginal);
+    const bool hooked = Detour_Attach(&g_viewDetour, (uint64_t)at, (void*)ViewValues,
+        &g_viewOriginal, "Lua.ViewValues") != nullptr && g_viewOriginal != nullptr;
+    BO3Diag_Log(hooked ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA", "ViewValues hook=%s trampoline=%p",
+        hooked ? "OK" : "FAILED", g_viewOriginal);
+    return hooked;
 }
 
 static void UpdateViewWiden()
@@ -984,16 +1047,27 @@ static uint64_t FindXAsset(uint64_t type, uint64_t name, uint64_t a3, uint64_t a
     return result;
 }
 
-static void HookFindXAsset()
+static bool HookFindXAsset()
 {
     static const uint8_t k_findXAsset[] = { 0x55, 0x48, 0x89, 0xE5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54,
                                             0x53, 0x48, 0x83, 0xEC, 0x68, 0x48, 0x8B, 0x05 };
+    const uintptr_t at = g_base + kFindXAsset;
+    if (!g_base || !RangeReadable(at, sizeof(k_findXAsset)))
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "FindXAsset signature range unreadable offset=+0x%llX", (unsigned long long)kFindXAsset);
+        return false;
+    }
+    if (memcmp((const void*)at, k_findXAsset, sizeof(k_findXAsset)) != 0)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "LUA", "FindXAsset signature mismatch offset=+0x%llX", (unsigned long long)kFindXAsset);
+        return false;
+    }
 
-    if (!g_base || !RangeReadable(g_base + kFindXAsset, sizeof(k_findXAsset)) ||
-        memcmp((const void*)(g_base + kFindXAsset), k_findXAsset, sizeof(k_findXAsset)) != 0)
-        return;
-
-    Detour_Attach(&g_findAssetDetour, (uint64_t)(g_base + kFindXAsset), (void*)FindXAsset, &g_findAssetOriginal);
+    const bool hooked = Detour_Attach(&g_findAssetDetour, (uint64_t)at, (void*)FindXAsset,
+        &g_findAssetOriginal, "Lua.FindXAsset") != nullptr && g_findAssetOriginal != nullptr;
+    BO3Diag_Log(hooked ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA", "FindXAsset hook=%s trampoline=%p",
+        hooked ? "OK" : "FAILED", g_findAssetOriginal);
+    return hooked;
 }
 
 static void AddPcUtil()
@@ -1089,19 +1163,23 @@ __asm__(
 void T7Lua_Install(uintptr_t base)
 {
     using namespace T7Lua;
-
     static bool installed = false;
-
     if (installed || !base)
         return;
 
-    installed = true;
+    BO3Diag_Log(BO3_DIAG_INFO, "LUA", "Lua/UI install entered base=0x%llX", (unsigned long long)base);
     g_base = base;
 
-    HookFindXAsset();
-    PatchFrameLimit();
-    PatchSplitScreen();
-    HookView();
+    const bool findAsset = HookFindXAsset();
+    const bool frameLimit = PatchFrameLimit();
+    const bool splitScreen = PatchSplitScreen();
+    const bool view = HookView();
+    installed = findAsset && frameLimit && splitScreen && view;
+
+    BO3Diag_Log(installed ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LUA",
+        "Lua/UI result FindXAsset=%s frame_limit=%s split_screen=%s ViewValues=%s overall=%s",
+        findAsset ? "OK" : "FAILED", frameLimit ? "OK" : "FAILED",
+        splitScreen ? "OK" : "FAILED", view ? "OK" : "FAILED", installed ? "installed" : "partial/retryable");
 }
 
 void T7Lua_Tick()

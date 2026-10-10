@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 #include "t7_kbm.hpp"
 #include "t7_kbm_strings.hpp"
 
@@ -2050,10 +2051,12 @@ static uint64_t CreateCmd(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, ui
 
 static void LoadMouse()
 {
+    BO3Diag_Log(BO3_DIAG_INFO, "KBM", "loading mouse system module");
     const int loaded = sceSysmoduleLoadModule(SCE_SYSMODULE_MOUSE);
 
     if (loaded != 0)
     {
+        BO3Diag_Log(BO3_DIAG_WARN, "KBM", "sceSysmoduleLoadModule(mouse) rc=0x%08X", (uint32_t)loaded);
         Log("sceSysmoduleLoadModule(mouse) = 0x%08X", (uint32_t)loaded);
         Notify("BO3 Customs: the mouse library did not load (0x%08X)", (uint32_t)loaded);
         return;
@@ -2061,6 +2064,8 @@ static void LoadMouse()
 
     const int init = sceMouseInit();
     g_mouseReady = init == 0;
+    BO3Diag_Log(g_mouseReady ? BO3_DIAG_INFO : BO3_DIAG_WARN, "KBM",
+        "sceMouseInit rc=0x%08X mouse_ready=%s", (uint32_t)init, g_mouseReady ? "yes" : "no");
 
     if (!g_mouseReady)
     {
@@ -2112,17 +2117,29 @@ void T7Kbm_Install(uintptr_t base)
     if (installed || !base)
         return;
 
-    if (!Matches(base + kImeHandler, k_imeHandler, sizeof(k_imeHandler)) ||
-        !Matches(base + kInputFrame, k_inputFrame, sizeof(k_inputFrame)) ||
-        !Matches(base + kCreateCmd, k_createCmd, sizeof(k_createCmd)) ||
-        !Matches(base + kKeyEvent, k_keyEvent, sizeof(k_keyEvent)) ||
-        !Matches(base + kExecBinding, k_execBinding, sizeof(k_execBinding)))
+    BO3Diag_Log(BO3_DIAG_INFO, "KBM", "keyboard/mouse install entered base=0x%llX", (unsigned long long)base);
+    const struct { uintptr_t offset; const uint8_t* bytes; size_t size; const char* name; } required[] =
     {
-        Log("this game build does not match - keyboard and mouse are off");
-        return;
+        { kImeHandler, k_imeHandler, sizeof(k_imeHandler), "IME handler" },
+        { kInputFrame, k_inputFrame, sizeof(k_inputFrame), "input frame" },
+        { kCreateCmd, k_createCmd, sizeof(k_createCmd), "CreateCmd" },
+        { kKeyEvent, k_keyEvent, sizeof(k_keyEvent), "key event" },
+        { kExecBinding, k_execBinding, sizeof(k_execBinding), "execute binding" },
+    };
+    for (const auto& check : required)
+    {
+        const bool matches = Matches(base + check.offset, check.bytes, check.size);
+        BO3Diag_Log(matches ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM",
+            "required signature name=%s offset=+0x%llX size=%llu result=%s",
+            check.name, (unsigned long long)check.offset, (unsigned long long)check.size,
+            matches ? "MATCH" : "MISMATCH");
+        if (!matches)
+        {
+            Log("this game build does not match - keyboard and mouse are off");
+            BO3Diag_Log(BO3_DIAG_ERROR, "KBM", "refusing keyboard/mouse hooks; failed signature=%s", check.name);
+            return;
+        }
     }
-
-    installed = true;
     g_base = base;
     g_cbufReady = Matches(base + kCbufAddText, k_cbufAddText, sizeof(k_cbufAddText));
     g_languageReady = Matches(base + kDvarInt, k_dvarInt, sizeof(k_dvarInt));
@@ -2142,7 +2159,15 @@ void T7Kbm_Install(uintptr_t base)
     Log("keyboard and mouse installed (menu cursor %s, prompts %s, key text %s)", g_luiReady ? "on" : "off",
         g_inputReady ? "on" : "off", g_textReady ? "on" : "off");
 
-    Detour_Attach(&g_imeDetour, (uint64_t)(base + kImeHandler), (void*)ImeHandler, &g_imeOriginal);
-    Detour_Attach(&g_frameDetour, (uint64_t)(base + kInputFrame), (void*)InputFrame, &g_frameOriginal);
-    Detour_Attach(&g_cmdDetour, (uint64_t)(base + kCreateCmd), (void*)CreateCmd, &g_cmdOriginal);
+    const bool imeHook = Detour_Attach(&g_imeDetour, (uint64_t)(base + kImeHandler),
+        (void*)ImeHandler, &g_imeOriginal, "KBM.ImeHandler") != nullptr && g_imeOriginal != nullptr;
+    const bool frameHook = Detour_Attach(&g_frameDetour, (uint64_t)(base + kInputFrame),
+        (void*)InputFrame, &g_frameOriginal, "KBM.InputFrame") != nullptr && g_frameOriginal != nullptr;
+    const bool cmdHook = Detour_Attach(&g_cmdDetour, (uint64_t)(base + kCreateCmd),
+        (void*)CreateCmd, &g_cmdOriginal, "KBM.CreateCmd") != nullptr && g_cmdOriginal != nullptr;
+    BO3Diag_Log((imeHook && frameHook && cmdHook) ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM",
+        "core hooks IME=%s InputFrame=%s CreateCmd=%s",
+        imeHook ? "OK" : "FAILED", frameHook ? "OK" : "FAILED", cmdHook ? "OK" : "FAILED");
+    if (!(imeHook && frameHook && cmdHook))
+        BO3Diag_Log(BO3_DIAG_WARN, "KBM", "partial KB/M setup; inspect the DETOUR errors immediately above");
 }
