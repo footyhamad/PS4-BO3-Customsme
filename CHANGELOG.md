@@ -1,5 +1,8 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.28 (GoldHEN PRX build validation; desktop package remains 1.2.1.4)
+- Synchronize the GoldHEN plugin metadata with the published four-part fork version and trigger the new dual-target pipeline so the GoldHEN CRT/link ABI is checked in CI.
+
 ## Fork 1.2.1.27 (GoldHEN plugin loader compatibility; desktop package remains 1.2.1.4)
 - Add a separate GoldHEN Plugins-compatible .prx using the official GoldHEN plugin CRT and exporting plugin_load/plugin_unload with plugin metadata; retain the generic OpenOrbis .sprx for loaders that call module_start.
 - Make GoldHEN module_start initialize C++ globals and return to the loader; defer BO3 detection, notifications and hook installation to plugin_load instead of blocking the loader's entrypoint.
