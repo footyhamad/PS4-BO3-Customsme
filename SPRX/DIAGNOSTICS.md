@@ -46,3 +46,8 @@ Added a directory-entry alias for OpenOrbis' FreeBSD-style records, supplied a p
 ## OpenOrbis dirent field correction (Fork 1.2.1.21)
 
 Removed a compatibility macro that incorrectly rewrote `d_fileno` to `d_ino`. The OpenOrbis directory-entry type already exposes `d_fileno`, which is what the scanner uses.
+
+
+## OpenOrbis dirent macro fix (Fork 1.2.1.22)
+
+The OpenOrbis compatibility header now undefines a `d_fileno` macro inherited from its directory headers because it rewrote the native `struct dirent` member to an unavailable `d_ino` member.

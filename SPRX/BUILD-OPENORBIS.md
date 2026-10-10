@@ -49,3 +49,6 @@ Fork 1.2.1.20 adapts the map scanner to OpenOrbis directory-entry declarations a
 
 
 Fork 1.2.1.21 removes an unnecessary `d_fileno` macro fallback because the OpenOrbis directory-entry structure already exposes the required `d_fileno` field.
+
+
+Fork 1.2.1.22 undefines the `d_fileno` compatibility macro in the OpenOrbis shim so the map scan compiles against the native directory-entry member used by this SDK.

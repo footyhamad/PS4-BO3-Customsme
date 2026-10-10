@@ -1,5 +1,8 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.22 (fix OpenOrbis dirent macro rewrite; desktop package remains 1.2.1.4)
+- Explicitly undefined the OpenOrbis libc `d_fileno` macro that rewrote directory-entry member access to the missing `d_ino` field.
+
 ## Fork 1.2.1.21 (fix OpenOrbis directory-entry member; desktop package remains 1.2.1.4)
 - Removed the invalid `d_fileno` to `d_ino` macro fallback; the OpenOrbis `struct dirent` already contains `d_fileno`.
 

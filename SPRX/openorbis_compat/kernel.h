@@ -8,6 +8,12 @@
 #include <fcntl.h>
 #include <dirent.h>
 
+// Some OpenOrbis libc header combinations rewrite d_fileno to d_ino, but
+// this SDK's dirent record exposes the native d_fileno member directly.
+#ifdef d_fileno
+#undef d_fileno
+#endif
+
 // Sony SDK-compatible name for the FreeBSD-style directory records returned by sceKernelGetdents.
 typedef struct dirent SceKernelDirent;
 
