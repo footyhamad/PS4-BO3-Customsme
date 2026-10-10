@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.24 (fix OpenOrbis CRT entrypoints and constructor bounds; desktop package remains 1.2.1.4)
+- Removed the broad `--allow-multiple-definition` linker option. The build localizes only the CRT object's fallback `module_start`/`module_stop`, leaving the fork's explicitly exported handlers intact.
+- Generates a linker-script copy with actual `__init_array_start`/`__init_array_end` boundaries around `.init_array`; retains constructor priority sections.
+- Added post-link verification of unique exported entrypoints and exact constructor-section bounds so a malformed ELF fails before fSELF packaging.
+
 ## Fork 1.2.1.23 (fix OpenOrbis CRT entrypoint collision; desktop package remains 1.2.1.4)
 - Resolved duplicate `module_start`/`module_stop` definitions between the SPRX and OpenOrbis `crtlib.o` while keeping the project handlers first in link order.
 - Added explicit OpenOrbis init-array execution at the start of the selected custom `module_start`, preserving C++ static initialization before launching the worker threads.

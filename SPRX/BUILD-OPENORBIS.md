@@ -8,7 +8,7 @@ Install the host build dependencies:
 
 ~~~bash
 sudo apt update
-sudo apt install -y clang-18 lld-18 make curl file
+sudo apt install -y clang-18 lld-18 make curl file binutils python3
 ~~~
 
 Download and extract the OpenOrbis v0.5.4 release, then point OO_PS4_TOOLCHAIN at the extracted directory that contains link.x, include/ and lib/:
@@ -54,6 +54,10 @@ Fork 1.2.1.21 removes an unnecessary `d_fileno` macro fallback because the OpenO
 Fork 1.2.1.22 undefines the `d_fileno` compatibility macro in the OpenOrbis shim so the map scan compiles against the native directory-entry member used by this SDK.
 
 
-## CRT entrypoint handling (Fork 1.2.1.23)
+## CRT entrypoint and constructor handling (Fork 1.2.1.24)
 
-OpenOrbis v0.5.4's `crtlib.o` provides its own hidden `module_start` and `module_stop` symbols. This fork's build allows the duplicates, with application objects ordered first; the custom `module_start` explicitly walks the SDK-provided init array before launching the SPRX's worker threads. This avoids losing C++ static initialization while retaining the custom shutdown handler. A successful link must still be verified on console.
+OpenOrbis v0.5.4's `crtlib.o` supplies hidden fallback `module_start` and `module_stop` symbols. The build creates a local copy of that object and localizes only those two fallback symbols; it does not use `--allow-multiple-definition`. The fork's handlers remain the one exported pair.
+
+The stock v0.5.4 linker script does not assign `__init_array_start` and `__init_array_end` to the constructor section. The build generates a local linker-script copy with explicit boundaries and keeps priority-sorted constructor sections. After linking, `verify_openorbis_elf.py` checks that the exported entrypoints are unique and the two boundaries exactly enclose the ELF's `.init_array` section. Packaging stops if any check fails.
+
+The linker may still report that a shared-library ELF has no standalone `_start`; an SPRX is loaded through its module entrypoint, not as a normal executable. The generated artifact still requires console testing on BO3 1.33; a successful compile/link is not proof of runtime stability.
