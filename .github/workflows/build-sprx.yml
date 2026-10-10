@@ -118,6 +118,26 @@ jobs:
           file SPRX/build/goldhen/BO3-Customs.prx
           readelf -h SPRX/build/goldhen/BO3-Customs.elf
 
+      - name: Package in-game UI scripts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p SPRX/build
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+          source = Path("SPRX/ui_scripts")
+          names = ("mapselect.lua", "maptable.lua", "graphics.lua")
+          with ZipFile("SPRX/build/BO3-Customs-UI-Scripts.zip", "w", ZIP_DEFLATED) as archive:
+              for name in names:
+                  path = source / name
+                  if not path.is_file():
+                      raise SystemExit(f"Missing required UI script: {path}")
+                  archive.write(path, f"ui_scripts/{name}")
+          print("Packaged mapselect.lua, maptable.lua, graphics.lua")
+          PY
+
       - name: Upload both builds and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -136,6 +156,7 @@ jobs:
             SPRX/build/goldhen/BO3-Customs.oelf
             SPRX/build/goldhen/BO3-Customs.symbols.txt
             SPRX/build/goldhen/goldhen-build.log
+            SPRX/build/BO3-Customs-UI-Scripts.zip
           if-no-files-found: warn
           retention-days: 30
 
