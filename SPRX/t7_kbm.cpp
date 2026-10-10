@@ -445,6 +445,20 @@ static const BindSetting k_bindSettings[] =
     { "bo3customs_bind_sprint",        "+breath_sprint",    kKeyShift },
     { "bo3customs_bind_prone",         "toggleprone",       kKeyCtrl },
     { "bo3customs_bind_interact",      "+activate",         'f' },
+    { "bo3customs_bind_reload",        "+reload",           'r' },
+    { "bo3customs_bind_attack",        "+attack",           kKeyMouse1 },
+    { "bo3customs_bind_aim",           "+toggleads_throw",  kKeyMouse2 },
+    { "bo3customs_bind_melee",         "+melee",            'v' },
+    { "bo3customs_bind_weapon_next",   "weapnext",          kKeyWheelUp },
+    { "bo3customs_bind_weapon_prev",   "weapprev",          kKeyWheelDown },
+    { "bo3customs_bind_inventory",     "+weapnext_inventory",'x' },
+    { "bo3customs_bind_frag",          "+frag",             kKeyMouse3 },
+    { "bo3customs_bind_tactical",      "+smoke",            '4' },
+    { "bo3customs_bind_specialist",    "+weaphero",         'q' },
+    { "bo3customs_bind_slot1",         "+actionslot 1",     '1' },
+    { "bo3customs_bind_slot2",         "+actionslot 2",     '2' },
+    { "bo3customs_bind_slot3",         "+actionslot 3",     '5' },
+    { "bo3customs_bind_slot4",         "+actionslot 4",     '3' },
     { "bo3customs_bind_scoreboard",    "+scores",           kKeyTab },
     { "bo3customs_bind_pause",         "pause",             kKeyPause },
 };
@@ -1332,7 +1346,6 @@ static void PollBindSettings()
         BO3Diag_Log(BO3_DIAG_INFO, "KBM",
             "keybinding changed action=%s old_key=%d new_key=%d config=%s",
             setting.command, previousKey, wantedKey, kConfigPath);
-        PostEvent("options_refresh");
         return; // apply one UI change per frame; keep other dvar snapshots intact
     }
 }

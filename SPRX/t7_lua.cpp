@@ -99,6 +99,20 @@ static const char k_kbmSettingsHookLua[] =
     "  { title='SPRINT', suffix='Sprint', dvar='bo3customs_bind_sprint', default=160 },\n"
     "  { title='PRONE', suffix='Prone', dvar='bo3customs_bind_prone', default=159 },\n"
     "  { title='INTERACT', suffix='Interact', dvar='bo3customs_bind_interact', default=string.byte('f') },\n"
+    "  { title='RELOAD', suffix='Reload', dvar='bo3customs_bind_reload', default=string.byte('r') },\n"
+    "  { title='FIRE', suffix='Attack', dvar='bo3customs_bind_attack', default=200 },\n"
+    "  { title='AIM / THROW', suffix='Aim', dvar='bo3customs_bind_aim', default=201 },\n"
+    "  { title='MELEE', suffix='Melee', dvar='bo3customs_bind_melee', default=string.byte('v') },\n"
+    "  { title='NEXT WEAPON', suffix='WeaponNext', dvar='bo3customs_bind_weapon_next', default=206 },\n"
+    "  { title='PREVIOUS WEAPON', suffix='WeaponPrev', dvar='bo3customs_bind_weapon_prev', default=205 },\n"
+    "  { title='INVENTORY', suffix='Inventory', dvar='bo3customs_bind_inventory', default=string.byte('x') },\n"
+    "  { title='FRAG GRENADE', suffix='Frag', dvar='bo3customs_bind_frag', default=202 },\n"
+    "  { title='TACTICAL', suffix='Tactical', dvar='bo3customs_bind_tactical', default=string.byte('4') },\n"
+    "  { title='SPECIALIST', suffix='Specialist', dvar='bo3customs_bind_specialist', default=string.byte('q') },\n"
+    "  { title='WEAPON SLOT 1', suffix='Slot1', dvar='bo3customs_bind_slot1', default=string.byte('1') },\n"
+    "  { title='WEAPON SLOT 2', suffix='Slot2', dvar='bo3customs_bind_slot2', default=string.byte('2') },\n"
+    "  { title='WEAPON SLOT 3', suffix='Slot3', dvar='bo3customs_bind_slot3', default=string.byte('5') },\n"
+    "  { title='WEAPON SLOT 4', suffix='Slot4', dvar='bo3customs_bind_slot4', default=string.byte('3') },\n"
     "  { title='SCOREBOARD', suffix='Scoreboard', dvar='bo3customs_bind_scoreboard', default=9 },\n"
     "  { title='PAUSE', suffix='Pause', dvar='bo3customs_bind_pause', default=153 },\n"
     "}\n"
@@ -1216,6 +1230,11 @@ static void AddPcUtil()
                 free(strings);
             }
 
+            // Install the list interceptor before mouse.lua creates its settings datasource.
+            const bool bindUiHook = RunLua(k_kbmSettingsHookLua, "=bo3customs_kbm_settings_hook");
+            BO3Diag_Log(bindUiHook ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM-UI",
+                "settings-list interceptor installed before mouse.lua=%s", bindUiHook ? "yes" : "no");
+
             char* const script = ReadScript("mouse.lua");
 
             if (script)
@@ -1225,11 +1244,6 @@ static void AddPcUtil()
 
                 free(script);
             }
-
-            const bool bindUiHook = RunLua(k_kbmSettingsHookLua, "=bo3customs_kbm_settings_hook");
-            BO3Diag_Log(bindUiHook ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "KBM-UI",
-                "settings-list interceptor execution=%s; key choices will be appended to the Mouse/KBM datasource when built",
-                bindUiHook ? "OK" : "FAILED");
 
             T7Log_Write("[Lua] our scripts went into the UI state for %s", (const char*)(g_base + kCurrentMap));
         }

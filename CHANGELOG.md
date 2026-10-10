@@ -1,15 +1,23 @@
 # PS4 BO3 Customsme — Fork Changelog
 
-## Fork 1.2.1.33 (limit new keybind editor to movement and utility controls; desktop package remains 1.2.1.4)
-- Keep the settings-list editor limited to movement, jump, sprint, prone, interact, scoreboard and pause controls. Existing weapon-action bindings remain unchanged.
-- Continue persisting selected keys to `/data/BO3-Customs/kbm.cfg` and updating engine bindings immediately; conflicting utility keys are moved off their previous action.
-- Keep the existing PRX/SPRX startup and loader behavior unchanged. CI and console testing are separate checks.
+## Fork 1.2.1.34 (fix: compile keybind editor and install the UI hook before mouse.lua; desktop package remains 1.2.1.4)
+- Fixed the CI compile failure caused by an unnecessary forward call to PostEvent from the new bind-setting poller.
+- Install the DataSourceHelpers list interceptor before loading mouse.lua, so it can append key selectors while the Mouse/KBM settings datasource is created.
+- Added configurable selectors for the existing keyboard/mouse action map, including movement, jump/sprint/prone, interaction, combat actions, weapon changes, grenades, specialist, scoreboard and pause. Settings persist to kbm.cfg.
+- Both OpenOrbis SPRX and GoldHEN PRX must compile in CI; console menu/runtime validation is still required.
+
+## Fork 1.2.1.33 (limit settings editor scope while build was being checked; desktop package remains 1.2.1.4)
+- Follow-up to the keybind editor: initially retained only movement and utility controls. Version 1.2.1.34 restores selectors for the existing full keyboard/mouse action map.
 
 ## Fork 1.2.1.32 (in-game keyboard/mouse bind editor; desktop package remains 1.2.1.4)
-- Stop sending toast notifications from `module_start`, before global constructor processing or before GoldHEN's normal `plugin_load` callback.
-- Send the generic SPRX startup canary from the initialization worker; keep the GoldHEN canary in `plugin_load`, matching the standard GoldHEN plugin lifecycle.
-- Keep invalid constructor-array failures in the persistent diagnostic log instead of calling the notification API from the module-entry callback.
-- CI compiles and checks the artifacts, but runtime validation on BO3 1.33 is still required.
+- Added settings-list selectors backed by bind dvars and the persistent kbm.cfg config.
+- The initial UI interceptor placement was too late in the menu load sequence; version 1.2.1.34 moves it before mouse.lua builds the datasource.
+
+## Fork 1.2.1.31 (fix SPRX startup notification timing; desktop package remains 1.2.1.4)
+- Stop sending toast notifications from module_start before global constructors or the GoldHEN plugin_load callback.
+- Send the generic SPRX startup canary from the initialization worker; keep the GoldHEN canary in plugin_load.
+- Keep invalid constructor-array failures in persistent diagnostics instead of calling the notification API from the module-entry callback.
+- CI compiles and checks artifacts, but runtime validation on BO3 1.33 is still required.
 
 ## Fork 1.2.1.30 (fix SPRX release publishing; desktop package remains 1.2.1.4)
 - Give the generic OpenOrbis and GoldHEN build logs distinct asset names. Uploading two files named `build.log` made the rolling-release upload collide and fail with a GitHub 404 after compilation succeeded.
