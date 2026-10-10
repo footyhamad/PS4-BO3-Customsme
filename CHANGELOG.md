@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.25 (SPRX OpenOrbis runtime startup fix; desktop package remains 1.2.1.4)
+- Resolve notifications through OpenOrbis' direct libkernel import and record the notification return code; keep the Sony-SDK lookup/fallback path unchanged.
+- Make BO3 base discovery on OpenOrbis fall back to the known BO3 1.33 title signature when the memory mapping is not named exactly `executable`.
+- Emit an early startup notification and an explicit user-visible notification when BO3 detection times out, instead of silently returning.
+
 ## Fork 1.2.1.24 (fix OpenOrbis CRT entrypoints and constructor bounds; desktop package remains 1.2.1.4)
 - Removed the broad `--allow-multiple-definition` linker option. The build localizes only the CRT object's fallback `module_start`/`module_stop`, leaving the fork's explicitly exported handlers intact.
 - Generates a linker-script copy with actual `__init_array_start`/`__init_array_end` boundaries around `.init_array`; retains constructor priority sections.

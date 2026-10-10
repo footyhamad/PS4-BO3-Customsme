@@ -107,6 +107,7 @@ uintptr_t WaitForBlackOps3()
     BO3Diag_Log(BO3_DIAG_FATAL, "BOOT",
         "BO3 detection timed out after 100 attempts; last_base=0x%llX; no subsystem hooks were installed",
         (unsigned long long)lastBase);
+    Notify("BO3 Customs SPRX started, but BO3 1.33 was not detected. Check diagnostics.log");
     return 0;
 }
 
@@ -333,6 +334,7 @@ int module_start(size_t argc, const void* args)
     BO3Diag_Init();
     BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "module_start entered argc=%llu args=%p",
         (unsigned long long)argc, args);
+    Notify("BO3 Customs SPRX %s started; waiting for BO3 1.33", BO3_CUSTOMS_SPRX_VERSION);
 
     g_diagnosticsThreadCreated = false;
     __atomic_store_n(&g_monitorRunning, true, __ATOMIC_RELEASE);

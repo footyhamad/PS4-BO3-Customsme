@@ -125,13 +125,35 @@ uint64_t GetBaseAddress() {
 
         address = (void*)end;
 
-        if (QueryProtection(info) != 5 || strcmp(QueryName(info), "executable") != 0)
+        if (QueryProtection(info) != 5)
             continue;
+
+        const bool namedExecutable = strcmp(QueryName(info), "executable") == 0;
+#ifdef BO3_OPENORBIS
+        // OpenOrbis may report a different mapping name for the main executable.
+        // Prefer the exact Sony name when present, otherwise identify BO3 by its
+        // known 1.33 title probe before caching the mapping as the executable base.
+        const uintptr_t titleProbe = start + 0x1312346;
+        const bool titleMatched = titleProbe >= start &&
+            (SafeStrStr(titleProbe, "Multiplayer") || SafeStrStr(titleProbe, "multiProgress"));
+        if (!namedExecutable && !titleMatched)
+            continue;
+        if (!namedExecutable && titleMatched)
+            BO3Diag_Log(BO3_DIAG_INFO, "MEMORY",
+                "identified BO3 executable by 1.33 title probe; mapping_name=%s prot=0x%X base=0x%llX end=0x%llX",
+                QueryName(info), QueryProtection(info), (unsigned long long)start, (unsigned long long)end);
+#else
+        if (!namedExecutable)
+            continue;
+#endif
 
         cached = start;
         g_execStart = start;
         g_execEnd = end;
         g_moduleEnd = end;
+        BO3Diag_Log(BO3_DIAG_INFO, "MEMORY",
+            "executable mapping accepted name=%s prot=0x%X base=0x%llX end=0x%llX",
+            QueryName(info), QueryProtection(info), (unsigned long long)start, (unsigned long long)end);
 
         SceKernelVirtualQueryInfo next;
         uintptr_t probe = end;
@@ -236,15 +258,6 @@ bool SafeStrStr(uintptr_t addr, const char* target, size_t maxScan) {
 }
 
 void Notify(const char* fmt, ...) {
-    if (!g_notificationReady) {
-        g_notificationReady = true;
-
-        void* address = nullptr;
-
-        if (sceKernelDlsym(0x2001, "sceKernelSendNotificationRequest", &address) == 0 && address)
-            g_sendNotification = (SendNotification_t)address;
-    }
-
     BO3NotificationRequest request{};
 
     va_list va;
@@ -257,10 +270,34 @@ void Notify(const char* fmt, ...) {
     request.useIconImageUri = 1;
     snprintf(request.iconUri, sizeof(request.iconUri), "%s", "cxml://psnotification/tex_icon_ribbon");
 
+#ifdef BO3_OPENORBIS
+    // The OpenOrbis SDK exports this API from libkernel. Use the direct import
+    // rather than relying on the Sony-SDK module handle accepted by Dlsym.
+    const int sendRc = sceKernelSendNotificationRequest(
+        0, reinterpret_cast<OrbisNotificationRequest*>(&request), sizeof(request), 0);
+    BO3Diag_Log(sendRc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "NOTIFY",
+        "direct OpenOrbis notification send rc=0x%08X message=%s", (uint32_t)sendRc, request.message);
+#else
+    if (!g_notificationReady) {
+        g_notificationReady = true;
+
+        void* address = nullptr;
+        const int lookupRc = sceKernelDlsym(0x2001, "sceKernelSendNotificationRequest", &address);
+        if (lookupRc == 0 && address)
+            g_sendNotification = (SendNotification_t)address;
+        BO3Diag_Log(g_sendNotification ? BO3_DIAG_INFO : BO3_DIAG_WARN, "NOTIFY",
+            "Sony-SDK notification lookup rc=0x%08X address=%p available=%s",
+            (uint32_t)lookupRc, address, g_sendNotification ? "yes" : "no");
+    }
+
+    int sendRc = 0;
     if (g_sendNotification)
-        g_sendNotification(0, &request, sizeof(request), 0);
-#ifndef BO3_OPENORBIS
+        sendRc = g_sendNotification(0, &request, sizeof(request), 0);
     else
-        sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+        sendRc = sceKernelSendNotificationRequest(0, &request, sizeof(request), 0);
+
+    BO3Diag_Log(sendRc == 0 ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "NOTIFY",
+        "notification send rc=0x%08X method=%s message=%s", (uint32_t)sendRc,
+        g_sendNotification ? "dlsym" : "direct-import-fallback", request.message);
 #endif
 }
