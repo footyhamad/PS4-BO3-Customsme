@@ -30,6 +30,7 @@
                    Text="Drop maps, mods, weapons and zones. The files that belong with them and the tools are found automatically."/>
       </StackPanel>
       <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+        <Button Click="OpenModLoaderClick" Padding="12,6" Margin="0,0,6,0" ToolTip="Discover PC mods and queue them for conversion"><TextBlock Text="Mod Loader"/></Button>
         <Button x:Name="GameFolderButton" Click="ChooseGameFolderClick" Padding="12,6" Margin="0,0,6,0">
           <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource Text.Icon}" Text="&#xE7FC;" Margin="0,0,8,0"/>
