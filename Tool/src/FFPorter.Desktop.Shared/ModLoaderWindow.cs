@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -59,6 +60,32 @@ internal sealed class ModLoaderWindow : Window
         footer.Children.Add(_status);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var chooseMaps = new Button { Content = "Select map candidates", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        chooseMaps.Click += (_, _) =>
+        {
+            foreach (ModCandidate candidate in _mods)
+                candidate.Selected = candidate.Category.Equals("Map candidate", StringComparison.OrdinalIgnoreCase);
+            _grid.Items.Refresh();
+        };
+        buttons.Children.Add(chooseMaps);
+
+        var clearSelection = new Button { Content = "Clear selection", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        clearSelection.Click += (_, _) =>
+        {
+            foreach (ModCandidate candidate in _mods)
+                candidate.Selected = false;
+            _grid.Items.Refresh();
+        };
+        buttons.Children.Add(clearSelection);
+
+        var export = new Button { Content = "Export report…", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        export.Click += (_, _) => ExportReport();
+        buttons.Children.Add(export);
+
+        var openFolder = new Button { Content = "Open selected folder", Padding = new Thickness(10, 7), Margin = new Thickness(0, 0, 8, 0) };
+        openFolder.Click += (_, _) => OpenSelectedFolder();
+        buttons.Children.Add(openFolder);
+
         var choose = new Button { Content = "Choose PC folder…", Padding = new Thickness(12, 7), Margin = new Thickness(0, 0, 8, 0) };
         choose.Click += (_, _) => ChooseRoot();
         buttons.Children.Add(choose);
@@ -372,6 +399,58 @@ internal sealed class ModLoaderWindow : Window
         if (candidate.TotalFiles > candidate.SampleFiles.Length)
             text.AppendLine($"… inventory display limited to {candidate.SampleFiles.Length} entries.");
         _details.Text = text.ToString();
+    }
+
+    private void OpenSelectedFolder()
+    {
+        if (_grid.SelectedItem is not ModCandidate candidate || !Directory.Exists(candidate.Path))
+        {
+            _status.Text = "Select a package with an accessible folder first.";
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = candidate.Path, UseShellExecute = true });
+            _log($"Mod Loader: opened package folder '{candidate.Path}'.");
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Could not open folder: {ex.Message}";
+            _log($"Mod Loader: open folder failed for '{candidate.Path}': {ex.Message}");
+        }
+    }
+
+    private void ExportReport()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Mod Loader scan report",
+            Filter = "JSON report (*.json)|*.json",
+            FileName = "bo3-mod-loader-report.json",
+            AddExtension = true,
+            DefaultExt = ".json"
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        try
+        {
+            var report = _mods.Select(m => new
+            {
+                m.Title, m.Name, m.Category, m.Status, m.Path, m.Fastfiles, m.TotalFiles,
+                m.Xpaks, m.SoundBanks, m.Movies, m.Scripts, m.WorkshopId, m.Description,
+                m.ManifestPath, m.Dependencies, m.SampleFiles, m.Selected
+            }).ToArray();
+            File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+            _status.Text = $"Exported {_mods.Count} package record(s) to {dialog.FileName}.";
+            _log($"Mod Loader: exported scan report '{dialog.FileName}' with {_mods.Count} package record(s).");
+        }
+        catch (Exception ex)
+        {
+            _status.Text = $"Report export failed: {ex.Message}";
+            _log($"Mod Loader: report export failed: {ex.Message}");
+        }
     }
 
     private void QueueSelected()
