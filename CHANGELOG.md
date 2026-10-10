@@ -1,5 +1,8 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.15 (fix OpenOrbis Linux case-sensitive includes; desktop package remains 1.2.1.4)
+- Corrected the HDE64 source includes to match the repository’s case-sensitive HDE64.h and Table64.h filenames so Linux/Actions can compile them.
+
 ## Fork 1.2.1.14 (OpenOrbis SPRX build pipeline; desktop package remains 1.2.1.4)
 - Added an OpenOrbis PS4 Toolchain build path using Clang/LLD and the open-source create-fself utility, plus local Makefile instructions and a GitHub Actions build.
 - Added isolated SDK compatibility headers for kernel, mouse, IME, sysmodule and user-service declarations; kept the existing Sony SDK/Visual Studio path intact.
