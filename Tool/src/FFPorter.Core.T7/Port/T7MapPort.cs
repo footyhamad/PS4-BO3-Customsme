@@ -133,8 +133,12 @@ public static class T7MapPort
         IEnumerable<string> sourceXpaks = Directory.EnumerateFiles(folder, "*.xpak");
         if (packageXpaks.Count > 0)
             sourceXpaks = sourceXpaks.Concat(packageXpaks.Values.SelectMany(p => p));
-        using T7PcStreamSource? pcStreams = options.ConvertStreams && options.PcStreamXPaks != null
-            ? new T7PcStreamSource(sourceXpaks.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).Concat(options.PcStreamXPaks), log)
+        bool hasStreamSources = options.PcStreamXPaks != null || packageXpaks.Count > 0;
+        using T7PcStreamSource? pcStreams = options.ConvertStreams && hasStreamSources
+            ? new T7PcStreamSource(
+                sourceXpaks.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)
+                    .Concat(options.PcStreamXPaks ?? Array.Empty<string>()),
+                log)
             : null;
 
         string PackageFile(string name)
