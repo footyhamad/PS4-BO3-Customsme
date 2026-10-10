@@ -26,5 +26,4 @@ extern "C" int nanosleep(const struct timespec* request, struct timespec* remain
 #include "t7_maps.hpp"
 #include "t7_mapimages.hpp"
 #include "t7_lua.hpp"
-#include "t7_kbm.hpp"
 #include "t7_log.hpp"
