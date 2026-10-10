@@ -28,10 +28,8 @@ at the root of the drive (a `BO3-Customs/zone/` there works too). Everything els
 ├── BO3-Customs.prx    # GoldHEN Plugins system build
 ├── ui_scripts/
 │   ├── graphics.lua
-│   ├── kbm_strings.lua
 │   ├── mapselect.lua
 │   ├── maptable.lua
-│   ├── mouse.lua
 │   └── restart.lua
 ├── lui/
 │   └── ui/
