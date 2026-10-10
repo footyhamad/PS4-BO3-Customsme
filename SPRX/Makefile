@@ -66,7 +66,8 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 
 $(ELF): $(OBJECTS) $(CRT_LOCAL) $(LINKER_SCRIPT)
 	$(LLD) $(OBJECTS) -o "$@" $(LDFLAGS) "$(CRT_LOCAL)"
-	python3 verify_openorbis_elf.py --nm "$(NM)" --readelf "$(READELF)" "$@" | tee "$(SYMBOL_REPORT)"
+	@python3 verify_openorbis_elf.py --nm "$(NM)" --readelf "$(READELF)" "$@" > "$(SYMBOL_REPORT)" 2>&1 || { cat "$(SYMBOL_REPORT)"; exit 1; }
+	@cat "$(SYMBOL_REPORT)"
 
 $(TARGET): $(ELF)
 	"$(TOOLCHAIN)/bin/linux/create-fself" -in="$(ELF)" -out="$(OELF)" --lib="$(TARGET)" --paid=0x3800000000000011 --fwversion=0x04050000

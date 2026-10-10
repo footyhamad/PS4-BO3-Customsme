@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.29 (exported GoldHEN callbacks and fail-closed build validation; desktop package remains 1.2.1.4)
+- Link the GoldHEN PRX with --export-dynamic so plugin_load/plugin_unload are included in the dynamic symbol table that the plugin loader resolves.
+- Make both ELF verifier recipes propagate failures instead of hiding Python verifier errors behind tee; require explicit callback/entrypoint validation before packaging.
+- Serialize SPRX rolling-release workflows to avoid concurrent clobber uploads racing against the same GitHub release assets.
+
 ## Fork 1.2.1.28 (GoldHEN PRX build validation; desktop package remains 1.2.1.4)
 - Synchronize the GoldHEN plugin metadata with the published four-part fork version and trigger the new dual-target pipeline so the GoldHEN CRT/link ABI is checked in CI.
 

@@ -27,7 +27,7 @@ COMMON_FLAGS := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables \
 	-isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include
 CFLAGS := $(COMMON_FLAGS) -c
 CXXFLAGS := $(COMMON_FLAGS) -isystem $(TOOLCHAIN)/include/c++/v1 -std=c++20 -fno-exceptions -c
-LDFLAGS := -m elf_x86_64 -pie --script $(LINKER_SCRIPT) -e _init --eh-frame-hdr \
+LDFLAGS := -m elf_x86_64 -pie --export-dynamic --script $(LINKER_SCRIPT) -e _init --eh-frame-hdr \
 	-L$(TOOLCHAIN)/lib $(LIBS)
 
 C_SOURCES := HDE64.c
@@ -67,7 +67,8 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 
 $(ELF): $(OBJECTS) $(CRT) $(LINKER_SCRIPT)
 	$(LLD) "$(CRT)" $(OBJECTS) -o "$@" $(LDFLAGS)
-	python3 verify_goldhen_elf.py --nm "$(NM)" --readelf "$(READELF)" "$@" | tee "$(SYMBOL_REPORT)"
+	@python3 verify_goldhen_elf.py --nm "$(NM)" --readelf "$(READELF)" "$@" > "$(SYMBOL_REPORT)" 2>&1 || { cat "$(SYMBOL_REPORT)"; exit 1; }
+	@cat "$(SYMBOL_REPORT)"
 
 $(TARGET): $(ELF)
 	"$(TOOLCHAIN)/bin/linux/create-fself" -in="$(ELF)" -out="$(OELF)" --lib="$(TARGET)" --paid=0x3800000000000011 --fwversion=0x04050000
