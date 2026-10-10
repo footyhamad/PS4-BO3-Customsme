@@ -200,6 +200,7 @@ public static class T7ModPort
                 ConvertMovies = options.ConvertMovies,
                 ApplyDelta = options.ApplyDelta,
                 PackageRoot = source,
+                PackageXPaks = files.Where(p => Path.GetExtension(p).Equals(".xpak", StringComparison.OrdinalIgnoreCase)).ToArray(),
                 Languages = options.Languages,
                 ShaderCompiler = options.ShaderCompiler,
                 Log = message => options.Log($"[{Path.GetFileName(main)}] {message}"),

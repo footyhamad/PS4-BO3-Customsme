@@ -32,6 +32,7 @@ public sealed class T7MapPortOptions
     // Optional package root used only by package mod conversion.
     // Null preserves existing map source discovery behavior.
     public string? PackageRoot { get; init; }
+    public IReadOnlyList<string>? PackageXPaks { get; init; }
     public Shaders.T7ShaderCompiler? ShaderCompiler { get; init; }
     public Action<string> Log { get; init; } = _ => { };
 
@@ -119,15 +120,14 @@ public static class T7MapPort
         var switchedSounds = new HashSet<uint>();
         var sharedStreams = new T7StreamMap();
         var packageXpaks = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(options.PackageRoot) && Directory.Exists(options.PackageRoot))
+        foreach (string path in options.PackageXPaks ?? [])
         {
-            foreach (string path in Directory.EnumerateFiles(options.PackageRoot, "*.xpak", SearchOption.AllDirectories))
-            {
-                string name = Path.GetFileName(path);
-                if (!packageXpaks.TryGetValue(name, out List<string>? paths))
-                    packageXpaks[name] = paths = [];
-                paths.Add(path);
-            }
+            if (!File.Exists(path))
+                continue;
+            string name = Path.GetFileName(path);
+            if (!packageXpaks.TryGetValue(name, out List<string>? paths))
+                packageXpaks[name] = paths = [];
+            paths.Add(path);
         }
 
         IEnumerable<string> sourceXpaks = Directory.EnumerateFiles(folder, "*.xpak");
