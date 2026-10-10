@@ -1166,6 +1166,11 @@ void T7Lua_Install(uintptr_t base)
     static bool installed = false;
     if (installed || !base)
         return;
+    if (!T7Maps_IsBuildSupported(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "LUA", "all Lua/UI hooks and patches refused: BO3 1.33 preflight failed");
+        return;
+    }
 
     BO3Diag_Log(BO3_DIAG_INFO, "LUA", "Lua/UI install entered base=0x%llX", (unsigned long long)base);
     g_base = base;

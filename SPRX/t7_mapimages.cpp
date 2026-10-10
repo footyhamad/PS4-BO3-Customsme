@@ -408,6 +408,11 @@ void T7MapImages_Install(uintptr_t base)
     static bool installed = false;
     if (installed || !base)
         return;
+    if (!T7Maps_IsBuildSupported(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "IMAGES", "all image hooks refused: BO3 1.33 preflight failed");
+        return;
+    }
 
     BO3Diag_Log(BO3_DIAG_INFO, "IMAGES", "map-image installer entered base=0x%llX", (unsigned long long)base);
     const bool registerMatch = Matches(base, kRegisterImage, k_registerImage, sizeof(k_registerImage));

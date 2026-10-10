@@ -2116,6 +2116,11 @@ void T7Kbm_Install(uintptr_t base)
 
     if (installed || !base)
         return;
+    if (!T7Maps_IsBuildSupported(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "KBM", "keyboard/mouse hooks refused: BO3 1.33 preflight failed");
+        return;
+    }
 
     BO3Diag_Log(BO3_DIAG_INFO, "KBM", "keyboard/mouse install entered base=0x%llX", (unsigned long long)base);
     const struct { uintptr_t offset; const uint8_t* bytes; size_t size; const char* name; } required[] =

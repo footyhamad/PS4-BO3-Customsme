@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 #include "t7_log.hpp"
 
 #ifdef _DEBUG
@@ -1072,11 +1073,16 @@ void T7Log_Install(uintptr_t base)
     using namespace T7Log;
 
     static bool installed = false;
-
     if (installed || !base)
         return;
 
-    installed = true;
+    BO3Diag_Init();
+    if (!T7Maps_IsBuildSupported(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "BUILD", "Debug logger hooks skipped: BO3 1.33 preflight failed");
+        return;
+    }
+
     g_base = base;
 
     const int fd = sceKernelOpen(kLogPath, SCE_KERNEL_O_WRONLY | SCE_KERNEL_O_CREAT | SCE_KERNEL_O_TRUNC, 0777);
@@ -1109,6 +1115,13 @@ void T7Log_Install(uintptr_t base)
     T7Log_Write("[Log] ExitLevel() %s, map() %s, console commands %s, server shutdowns %s, KillServer() at the first level load",
                 exitLevel ? "logged" : "NOT logged", map ? "logged" : "NOT logged", commands ? "logged" : "NOT logged",
                 shutdowns ? "logged" : "NOT logged");
+
+    installed = ui && script && error && missing && exitLevel && map && commands && shutdowns;
+    BO3Diag_Log(installed ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "LEGACY-LOG",
+        "Debug logging hook summary ui=%s script=%s error=%s missing=%s exit_level=%s map=%s commands=%s shutdown=%s state=%s",
+        ui ? "OK" : "FAILED", script ? "OK" : "FAILED", error ? "OK" : "FAILED", missing ? "OK" : "FAILED",
+        exitLevel ? "OK" : "FAILED", map ? "OK" : "FAILED", commands ? "OK" : "FAILED",
+        shutdowns ? "OK" : "FAILED", installed ? "installed" : "partial/retryable");
 }
 
 void T7Log_Write(const char* format, ...)
@@ -1231,32 +1244,58 @@ void T7Log_NewLevel()
 
 #else
 
-void T7Log_Install(uintptr_t)
+// Debug-only stack collection remains disabled in Release, but every existing call-site
+// writes a persistent event breadcrumb through the always-on diagnostics logger.
+void T7Log_Install(uintptr_t base)
 {
+    BO3Diag_Init();
+    if (!T7Maps_IsBuildSupported(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "BUILD", "Release logger confirms unsupported build; BO3 1.33 is the only target");
+        return;
+    }
+    BO3Diag_Log(BO3_DIAG_INFO, "LEGACY-LOG",
+        "Release build: verbose debug stack hooks disabled; persistent event breadcrumbs enabled; base=0x%llX",
+        (unsigned long long)base);
 }
 
-void T7Log_Write(const char*, ...)
+void T7Log_Write(const char* format, ...)
 {
+    va_list args;
+    va_start(args, format);
+    BO3Diag_LogV(BO3_DIAG_INFO, "GAME", format, args);
+    va_end(args);
 }
 
-void T7Log_LuiFile(const char*)
+void T7Log_LuiFile(const char* name)
 {
+    BO3Diag_Log(BO3_DIAG_INFO, "LUI", "raw/UI file requested name=%s", name ? name : "(null)");
 }
 
-void T7Log_LuiBuffer(const char*, uintptr_t)
+void T7Log_LuiBuffer(const char* name, uintptr_t rawFile)
 {
+    BO3Diag_Log(BO3_DIAG_INFO, "LUI", "raw/UI buffer asset=%s pointer=0x%llX",
+        name ? name : "(null)", (unsigned long long)rawFile);
 }
 
-void T7Log_LuaFailure(uintptr_t, uint64_t, const char*, const char*)
+void T7Log_LuaFailure(uintptr_t L, uint64_t topOffset, const char* chunk, const char* what)
 {
+    BO3Diag_Log(BO3_DIAG_ERROR, "LUA",
+        "script failure action=%s chunk=%s lua_state=0x%llX top_offset=0x%llX",
+        what ? what : "(unknown)", chunk ? chunk : "(unknown)",
+        (unsigned long long)L, (unsigned long long)topOffset);
 }
 
-void T7Log_Zone(const char*, int32_t, int32_t)
+void T7Log_Zone(const char* name, int32_t allocFlags, int32_t freeFlags)
 {
+    BO3Diag_Log(BO3_DIAG_INFO, "ZONE", "%s zone=%s alloc_flags=0x%X free_flags=0x%X",
+        allocFlags ? "load" : "unload", name ? name : "(unnamed)",
+        (uint32_t)allocFlags, (uint32_t)freeFlags);
 }
 
 void T7Log_NewLevel()
 {
+    BO3Diag_Log(BO3_DIAG_INFO, "LEVEL", "new level load started");
 }
 
 #endif
