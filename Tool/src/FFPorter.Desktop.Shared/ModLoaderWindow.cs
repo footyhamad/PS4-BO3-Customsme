@@ -201,21 +201,23 @@ internal sealed class ModLoaderWindow : Window
         }
     }
 
-    private static IEnumerable<string> SafeDirectories(string root)
+    private static IReadOnlyList<string> SafeDirectories(string root)
     {
-        try
+        string[] directories;
+        try { directories = Directory.EnumerateDirectories(root).ToArray(); }
+        catch (Exception) { return Array.Empty<string>(); }
+
+        var safe = new List<string>(directories.Length);
+        foreach (string directory in directories)
         {
-            foreach (string directory in Directory.EnumerateDirectories(root))
+            try
             {
-                try
-                {
-                    if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
-                        yield return directory;
-                }
-                catch (Exception) { }
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
+                    safe.Add(directory);
             }
+            catch (Exception) { }
         }
-        catch (Exception) { }
+        return safe;
     }
 
     private static ModCandidate? Inspect(string folder, string category)
