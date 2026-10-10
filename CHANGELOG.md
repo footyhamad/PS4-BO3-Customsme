@@ -1,5 +1,10 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.12 (SPRX startup and heartbeat diagnostics; desktop package remains 1.2.1.4)
+- Initialize persistent diagnostics at module load, before waiting for BO3, and log detection timeouts, thread failures, storage-probe/mount results, subsystem stages, and the main frame-hook signature/outcome.
+- Run the ten-second heartbeat from an independent monitor thread so it continues recording when the game's frame hook stalls; include a frame-stalled state when frame calls stop advancing.
+- Record logger/monitor lifecycle and startup duration. Actual PS4 SDK compilation and console runtime testing are still required.
+
 ## Fork 1.2.1.11 (SPRX diagnostics; desktop package remains 1.2.1.4)
 - Added an always-on append-only diagnostics log for Release and Debug builds at `/data/BO3-Customs/diagnostics.log`, with a fallback path and per-record writes/close.
 - Added ten-second runtime heartbeats, detailed BO3 1.33 signature mismatch reporting, subsystem stage timing, per-root map-scan totals, and release-build event breadcrumbs.

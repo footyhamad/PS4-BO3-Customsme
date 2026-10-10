@@ -1195,8 +1195,7 @@ void T7Lua_Tick()
         return;
 
     ++g_ticks;
-    // This function is driven by the main frame hook; the logger throttles output to one heartbeat per ten seconds.
-    BO3Diag_Heartbeat("lua-tick", g_base, T7Maps_MapCount(), true, (uint64_t)g_ticks, false);
+    // An independent monitor thread records heartbeats so a stalled frame hook is still diagnosable.
 
     AddPcUtil();
 
