@@ -14,9 +14,6 @@ typedef struct dirent SceKernelDirent;
 #ifndef DT_DIR
 #define DT_DIR 4
 #endif
-#ifndef d_fileno
-#define d_fileno d_ino
-#endif
 
 typedef OrbisKernelVirtualQueryInfo SceKernelVirtualQueryInfo;
 typedef OrbisKernelStat SceKernelStat;

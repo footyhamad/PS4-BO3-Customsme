@@ -1,5 +1,8 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.21 (fix OpenOrbis directory-entry member; desktop package remains 1.2.1.4)
+- Removed the invalid `d_fileno` to `d_ino` macro fallback; the OpenOrbis `struct dirent` already contains `d_fileno`.
+
 ## Fork 1.2.1.20 (fix OpenOrbis map scan declarations; desktop package remains 1.2.1.4)
 - Added the OpenOrbis `SceKernelDirent` alias to the SDK's `struct dirent`, with a fallback `DT_DIR` constant and `d_fileno` alias where needed.
 - Replaced the unsupported `strnlen` use with an explicit bounded scan and fixed the existing `Prologue::what` field-name typo in the build preflight logger.

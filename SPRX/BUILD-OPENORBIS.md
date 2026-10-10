@@ -46,3 +46,6 @@ Fork 1.2.1.19 adds the `SceKernelStat` compatibility alias for OpenOrbis' `Orbis
 
 
 Fork 1.2.1.20 adapts the map scanner to OpenOrbis directory-entry declarations and removes a non-portable bounded-string call. It also fixes a diagnostic field-name typo that prevented `t7_maps.cpp` from compiling.
+
+
+Fork 1.2.1.21 removes an unnecessary `d_fileno` macro fallback because the OpenOrbis directory-entry structure already exposes the required `d_fileno` field.

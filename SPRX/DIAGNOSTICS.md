@@ -41,3 +41,8 @@ Added the missing compatibility alias from Sony SDK naming to OpenOrbis' `OrbisK
 ## OpenOrbis map-scan compatibility (Fork 1.2.1.20)
 
 Added a directory-entry alias for OpenOrbis' FreeBSD-style records, supplied a portable directory-type fallback, replaced the unavailable `strnlen` use with a bounded loop, and corrected BO3 1.33 signature diagnostics to use the existing `Prologue::what` field.
+
+
+## OpenOrbis dirent field correction (Fork 1.2.1.21)
+
+Removed a compatibility macro that incorrectly rewrote `d_fileno` to `d_ino`. The OpenOrbis directory-entry type already exposes `d_fileno`, which is what the scanner uses.
