@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 #include "t7_mapimages.hpp"
 #include "t7_maps.hpp"
 #include "png.hpp"
@@ -404,29 +405,44 @@ static bool Matches(uintptr_t base, uintptr_t offset, const uint8_t* bytes, size
 void T7MapImages_Install(uintptr_t base)
 {
     using namespace T7MapImages;
-
     static bool installed = false;
-
     if (installed || !base)
         return;
 
-    installed = true;
+    BO3Diag_Log(BO3_DIAG_INFO, "IMAGES", "map-image installer entered base=0x%llX", (unsigned long long)base);
+    const bool registerMatch = Matches(base, kRegisterImage, k_registerImage, sizeof(k_registerImage));
+    const bool setMatch = Matches(base, kSetImage, k_setImage, sizeof(k_setImage));
+    const bool dynamicMatch = Matches(base, kDynamicImage, k_dynamicImage, sizeof(k_dynamicImage));
+    const bool findMatch = Matches(base, kFindAsset, k_findAsset, sizeof(k_findAsset));
 
-    if (!Matches(base, kRegisterImage, k_registerImage, sizeof(k_registerImage)) ||
-        !Matches(base, kSetImage, k_setImage, sizeof(k_setImage)) ||
-        !Matches(base, kDynamicImage, k_dynamicImage, sizeof(k_dynamicImage)) ||
-        !Matches(base, kFindAsset, k_findAsset, sizeof(k_findAsset)))
+    BO3Diag_Log(registerMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "IMAGES",
+        "RegisterImage signature offset=+0x%llX %s", (unsigned long long)kRegisterImage, registerMatch ? "MATCH" : "MISMATCH");
+    BO3Diag_Log(setMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "IMAGES",
+        "SetImage signature offset=+0x%llX %s", (unsigned long long)kSetImage, setMatch ? "MATCH" : "MISMATCH");
+    BO3Diag_Log(dynamicMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "IMAGES",
+        "DynamicImage signature offset=+0x%llX %s", (unsigned long long)kDynamicImage, dynamicMatch ? "MATCH" : "MISMATCH");
+    BO3Diag_Log(findMatch ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "IMAGES",
+        "FindXAsset signature offset=+0x%llX %s", (unsigned long long)kFindAsset, findMatch ? "MATCH" : "MISMATCH");
+
+    if (!registerMatch || !setMatch || !dynamicMatch || !findMatch)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "IMAGES", "refusing image hooks because a required signature failed");
         return;
+    }
 
     g_base = base;
-
-    Detour_Attach(&g_setImageDetour, (uint64_t)(base + kSetImage), (void*)SetImage_h, &g_setImageOriginal);
-
-    if (!g_setImageOriginal)
+    const bool setHook = Detour_Attach(&g_setImageDetour, (uint64_t)(base + kSetImage),
+        (void*)SetImage_h, &g_setImageOriginal, "Images.SetImage") != nullptr && g_setImageOriginal != nullptr;
+    if (!setHook)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "IMAGES", "SetImage hook failed; RegisterImage hook deferred");
         return;
+    }
 
-    Detour_Attach(&g_registerDetour, (uint64_t)(base + kRegisterImage), (void*)RegisterImage_h, &g_registerOriginal);
-
-    if (!g_registerOriginal)
-        return;
+    const bool registerHook = Detour_Attach(&g_registerDetour, (uint64_t)(base + kRegisterImage),
+        (void*)RegisterImage_h, &g_registerOriginal, "Images.RegisterImage") != nullptr && g_registerOriginal != nullptr;
+    installed = setHook && registerHook;
+    BO3Diag_Log(installed ? BO3_DIAG_INFO : BO3_DIAG_ERROR, "IMAGES",
+        "image hook status SetImage=%s RegisterImage=%s installer=%s",
+        setHook ? "OK" : "FAILED", registerHook ? "OK" : "FAILED", installed ? "installed" : "retryable");
 }

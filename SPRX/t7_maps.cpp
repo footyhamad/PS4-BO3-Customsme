@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "diag.hpp"
 #include "t7_maps.hpp"
 #include "t7_mapimages.hpp"
 #include "t7_lua.hpp"
@@ -185,6 +186,9 @@ static bool      g_buildMatched = false;
 static int       g_listedMaps = 0;
 static bool      g_hooksInstalled = false;
 static bool      g_rankLowered = false;
+static uintptr_t g_preflightBase = 0;
+static bool      g_preflightChecked = false;
+static bool      g_preflightMatches = false;
 
 static std::atomic<int32_t> g_listReaders{0};
 static std::atomic<bool>    g_listWriting{false};
@@ -2803,15 +2807,57 @@ static bool BuildMatches(uintptr_t base)
         { kLoadXAssets, "DB_LoadXAssets",  k_loadZones,  sizeof(k_loadZones) },
     };
 
+    BO3Diag_Log(BO3_DIAG_INFO, "BUILD", "checking %llu mandatory BO3 1.33 signatures",
+        (unsigned long long)(sizeof(checks) / sizeof(checks[0])));
     for (const Prologue& check : checks)
     {
         const uintptr_t at = base + check.offset;
-
-        if (!RangeReadable(at, check.size) || memcmp((const void*)at, check.bytes, check.size) != 0)
+        if (!RangeReadable(at, check.size))
+        {
+            BO3Diag_Log(BO3_DIAG_FATAL, "BUILD",
+                "signature unreadable name=%s offset=+0x%llX address=0x%llX bytes=%llu",
+                check.name, (unsigned long long)check.offset, (unsigned long long)at, (unsigned long long)check.size);
             return false;
+        }
+        if (memcmp((const void*)at, check.bytes, check.size) != 0)
+        {
+            char expected[128] = {};
+            char actual[128] = {};
+            size_t expectedUsed = 0, actualUsed = 0;
+            const size_t preview = check.size < 20 ? check.size : 20;
+            for (size_t i = 0; i < preview; ++i)
+            {
+                expectedUsed += (size_t)snprintf(expected + expectedUsed, sizeof(expected) - expectedUsed,
+                    "%s%02X", i ? " " : "", check.bytes[i]);
+                actualUsed += (size_t)snprintf(actual + actualUsed, sizeof(actual) - actualUsed,
+                    "%s%02X", i ? " " : "", ((const uint8_t*)at)[i]);
+            }
+            BO3Diag_Log(BO3_DIAG_FATAL, "BUILD",
+                "signature mismatch name=%s offset=+0x%llX address=0x%llX bytes=%llu expected=[%s] actual=[%s]",
+                check.name, (unsigned long long)check.offset, (unsigned long long)at,
+                (unsigned long long)check.size, expected, actual);
+            return false;
+        }
+        BO3Diag_Log(BO3_DIAG_INFO, "BUILD", "signature matched name=%s offset=+0x%llX bytes=%llu",
+            check.name, (unsigned long long)check.offset, (unsigned long long)check.size);
     }
-
+    BO3Diag_Log(BO3_DIAG_INFO, "BUILD", "all mandatory BO3 1.33 signatures matched");
     return true;
+}
+
+static bool CheckBuild(uintptr_t base)
+{
+    if (!base)
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "BUILD", "cannot validate BO3 1.33: null executable base");
+        return false;
+    }
+    if (g_preflightChecked && g_preflightBase == base)
+        return g_preflightMatches;
+    g_preflightBase = base;
+    g_preflightChecked = true;
+    g_preflightMatches = BuildMatches(base);
+    return g_preflightMatches;
 }
 
 static void ScanAll()
@@ -2849,15 +2895,24 @@ static void InstallHooks(uintptr_t base)
     if (g_hooksInstalled)
         return;
 
-    g_hooksInstalled = true;
-
+    BO3Diag_Log(BO3_DIAG_INFO, "MAPS", "installing mandatory map-loader hooks");
     for (const SignaturePatch& patch : k_signaturePatches)
         RemoveSignaturePenalty(base, patch);
 
-    Detour_Attach(&g_openDetour, (uint64_t)(base + kFileOpen), (void*)FileOpen_h, &g_openOriginal);
-    Detour_Attach(&g_existsDetour, (uint64_t)(base + kMapExists), (void*)MapExists_h, &g_existsOriginal);
-    Detour_Attach(&g_validDetour, (uint64_t)(base + kIsMapValid), (void*)IsMapValid_h, &g_validOriginal);
-    Detour_Attach(&g_loadDetour, (uint64_t)(base + kLoadXAssets), (void*)LoadXAssets_h, &g_loadOriginal);
+    const bool openHook = Detour_Attach(&g_openDetour, (uint64_t)(base + kFileOpen),
+        (void*)FileOpen_h, &g_openOriginal, "Maps.FileOpen") != nullptr && g_openOriginal != nullptr;
+    const bool existsHook = Detour_Attach(&g_existsDetour, (uint64_t)(base + kMapExists),
+        (void*)MapExists_h, &g_existsOriginal, "Maps.MapExists") != nullptr && g_existsOriginal != nullptr;
+    const bool validHook = Detour_Attach(&g_validDetour, (uint64_t)(base + kIsMapValid),
+        (void*)IsMapValid_h, &g_validOriginal, "Maps.IsMapValid") != nullptr && g_validOriginal != nullptr;
+    const bool loadHook = Detour_Attach(&g_loadDetour, (uint64_t)(base + kLoadXAssets),
+        (void*)LoadXAssets_h, &g_loadOriginal, "Maps.DB_LoadXAssets") != nullptr && g_loadOriginal != nullptr;
+
+    BO3Diag_Log((openHook && existsHook && validHook && loadHook) ? BO3_DIAG_INFO : BO3_DIAG_ERROR,
+        "MAPS", "core hook status FileOpen=%s MapExists=%s IsMapValid=%s DB_LoadXAssets=%s",
+        openHook ? "OK" : "FAILED", existsHook ? "OK" : "FAILED",
+        validHook ? "OK" : "FAILED", loadHook ? "OK" : "FAILED");
+    g_hooksInstalled = openHook && existsHook && validHook && loadHook;
 
     if (RangeReadable(base + kDlcBitForMap, sizeof(k_dlcBitForMap)) &&
         memcmp((const void*)(base + kDlcBitForMap), k_dlcBitForMap, sizeof(k_dlcBitForMap)) == 0)
@@ -2948,27 +3003,39 @@ static void InstallHooks(uintptr_t base)
 }
 }
 
+bool T7Maps_IsBuildSupported(uintptr_t base)
+{
+    return T7Maps::CheckBuild(base);
+}
+
 void T7Maps_Install(uintptr_t base)
 {
     using namespace T7Maps;
-
     static bool installed = false;
-
     if (installed || !base)
         return;
 
-    installed = true;
-
-    if (!BuildMatches(base))
+    BO3Diag_Log(BO3_DIAG_INFO, "MAPS", "map loader install entered base=0x%llX",
+        (unsigned long long)base);
+    if (!CheckBuild(base))
+    {
+        BO3Diag_Log(BO3_DIAG_FATAL, "MAPS", "refusing map hooks because BO3 1.33 preflight failed");
         return;
+    }
 
     g_buildMatched = true;
     g_base = base;
-
     ScanAll();
-
     if (g_packageCount)
         InstallHooks(base);
+    else
+        BO3Diag_Log(BO3_DIAG_WARN, "MAPS", "no custom packages discovered; map hooks remain idle until refresh");
+
+    installed = true;
+    BO3Diag_Log(BO3_DIAG_INFO, "MAPS",
+        "map loader complete hooks=%s packages=%d files=%d maps=%d",
+        g_hooksInstalled ? "complete" : (g_packageCount ? "partial" : "not-needed"),
+        g_packageCount, g_fileCount, g_listedMaps);
 }
 
 bool T7Maps_Refresh()
@@ -2985,6 +3052,8 @@ bool T7Maps_Refresh()
     if (g_packageCount)
         InstallHooks(g_base);
 
+    BO3Diag_Log(BO3_DIAG_INFO, "SCAN", "refresh complete packages=%d files=%d maps=%d core_hooks=%s",
+        g_packageCount, g_fileCount, g_listedMaps, g_hooksInstalled ? "complete" : "partial");
     return true;
 }
 
