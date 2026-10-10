@@ -353,7 +353,16 @@ internal sealed class ModLoaderWindow : Window
             }
 
             foreach (string directory in SafeDirectories(current))
+            {
+                string name = Path.GetFileName(directory);
+                if (name.Equals(".git", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("cache", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("zone_cache", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("shadercache", StringComparison.OrdinalIgnoreCase)
+                    || name.Equals("work", StringComparison.OrdinalIgnoreCase))
+                    continue;
                 pending.Push(directory);
+            }
         }
     }
 
