@@ -1,7 +1,9 @@
 #pragma once
 
+#ifndef BO3_OPENORBIS
 typedef int (*sceKernelDebugOutText_t)(int32_t dbg_channel, const char* text);
 inline sceKernelDebugOutText_t sceKernelDebugOutText = nullptr;
+#endif
 
 uint64_t GetBaseAddress();
 

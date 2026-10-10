@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#ifdef BO3_OPENORBIS
+#include <time.h>
+extern "C" int nanosleep(const struct timespec* request, struct timespec* remaining);
+#endif
 #include <string>
 
 #include <kernel.h>

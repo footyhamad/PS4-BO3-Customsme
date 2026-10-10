@@ -48,8 +48,12 @@ bool AppendLine(const char* path, const char* line, size_t size)
 
 void DebugFallback(const char* line)
 {
+#ifdef BO3_OPENORBIS
+    sceKernelDebugOutText(0, "%s", line);
+#else
     if (sceKernelDebugOutText)
         sceKernelDebugOutText(0, line);
+#endif
 }
 
 void PersistLine(const char* line, size_t size)

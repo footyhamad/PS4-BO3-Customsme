@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.16 (fix OpenOrbis libc++ and debug output declarations; desktop package remains 1.2.1.4)
+- Declared the POSIX nanosleep interface before libc++ threading headers and separated the OpenOrbis debug-output symbol from the original Sony-SDK function-pointer shim.
+- Routed OpenOrbis fallback diagnostics through the public kernel debug-output API without changing the Sony SDK path.
+
 ## Fork 1.2.1.15 (fix OpenOrbis Linux case-sensitive includes; desktop package remains 1.2.1.4)
 - Corrected the HDE64 source includes to match the repository’s case-sensitive HDE64.h and Table64.h filenames so Linux/Actions can compile them.
 
