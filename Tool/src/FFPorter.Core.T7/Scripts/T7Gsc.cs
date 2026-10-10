@@ -32,6 +32,9 @@ public sealed class T7Gsc
             throw new InvalidDataException("not a compiled GSC buffer");
         if (pc[7] != Version)
             throw new InvalidDataException($"GSC version 0x{pc[7]:x2}: only 0x1C (the version both executables load) converts");
+        if (LooksLikePs4NativeExportTable(pc))
+            throw new InvalidDataException("GSC export records use PS4-native 0xFFFFFFFF checksum sentinels; refusing to interpret this as PC bytecode. Supply a PC-compiled GSC for conversion.");
+
         byte[] buffer = pc.ToArray();
         int codeStart = (int)Read32(buffer, 0x14), codeSize = (int)Read32(buffer, 0x30);
         int exportsOffset = (int)Read32(buffer, 0x20), exportCount = BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(0x3A));
@@ -71,6 +74,51 @@ public sealed class T7Gsc
         foreach ((int position, int start, int end) in functions)
             BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(position), Crc32(buffer.AsSpan(start, end - start)));
         return buffer;
+    }
+
+    // PS4 and PC BO3 scripts can share GSC version 0x1C. The target-platform
+    // script we inspected uses 0xFFFFFFFF in every export checksum slot, so
+    // checking only the version byte is not enough to identify PC input.
+    private static bool LooksLikePs4NativeExportTable(ReadOnlySpan<byte> gsc)
+    {
+        const int HeaderSize = 0x48;
+        const int ExportEntrySize = 20;
+
+        if (gsc.Length < HeaderSize)
+            return false;
+
+        uint codeStart = BinaryPrimitives.ReadUInt32LittleEndian(gsc.Slice(0x14, 4));
+        uint codeSize = BinaryPrimitives.ReadUInt32LittleEndian(gsc.Slice(0x30, 4));
+        uint exportsOffset = BinaryPrimitives.ReadUInt32LittleEndian(gsc.Slice(0x20, 4));
+        int exportCount = BinaryPrimitives.ReadUInt16LittleEndian(gsc.Slice(0x3A, 2));
+        long exportsEnd = (long)exportsOffset + (long)exportCount * ExportEntrySize;
+        long codeEnd = (long)codeStart + codeSize;
+
+        if (exportCount == 0
+            || codeStart < HeaderSize
+            || codeSize == 0
+            || codeEnd > gsc.Length
+            || exportsOffset < HeaderSize
+            || exportsOffset > int.MaxValue
+            || exportsEnd > codeStart
+            || exportsEnd > gsc.Length)
+            return false;
+
+        uint previousOffset = 0;
+        for (int i = 0; i < exportCount; i++)
+        {
+            int entry = (int)exportsOffset + i * ExportEntrySize;
+            uint checksum = BinaryPrimitives.ReadUInt32LittleEndian(gsc.Slice(entry, 4));
+            uint offset = BinaryPrimitives.ReadUInt32LittleEndian(gsc.Slice(entry + 4, 4));
+            if (checksum != uint.MaxValue
+                || offset < codeStart
+                || offset >= codeEnd
+                || (i > 0 && offset <= previousOffset))
+                return false;
+            previousOffset = offset;
+        }
+
+        return true;
     }
 
     private int LayoutEnd(byte[] buffer, int start, int next)
