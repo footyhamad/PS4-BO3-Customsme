@@ -31,3 +31,8 @@ The OpenOrbis build intentionally omits the bundled `libjbc.cpp` kernel credenti
 ## OpenOrbis portability update (Fork 1.2.1.18)
 
 The OpenOrbis path now reads virtual-query address/protection/name fields through a size-checked local view of the v0.5.4 ABI layout, avoiding compiler dependence on inconsistent member names. The local notification payload structure also has a unique name to avoid collisions with SDK declarations. These are compile-compatibility changes; successful compilation and console runtime behavior still need confirmation.
+
+
+## OpenOrbis stat alias (Fork 1.2.1.19)
+
+Added the missing compatibility alias from Sony SDK naming to OpenOrbis' `OrbisKernelStat`, used by custom image/file reads.

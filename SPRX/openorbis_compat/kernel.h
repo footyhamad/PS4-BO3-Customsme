@@ -9,6 +9,7 @@
 #include <dirent.h>
 
 typedef OrbisKernelVirtualQueryInfo SceKernelVirtualQueryInfo;
+typedef OrbisKernelStat SceKernelStat;
 typedef OrbisPthread ScePthread;
 
 #ifndef SCE_KERNEL_VQ_FIND_NEXT

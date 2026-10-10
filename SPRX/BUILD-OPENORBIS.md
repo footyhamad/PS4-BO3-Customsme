@@ -40,3 +40,6 @@ The OpenOrbis Makefile excludes `libjbc.cpp`, which contains a bundled kernel cr
 
 
 Fork 1.2.1.18 adds a size/offset-checked ABI view for OpenOrbis virtual-query metadata and uniquely names the notification payload type to avoid public SDK header collisions.
+
+
+Fork 1.2.1.19 adds the `SceKernelStat` compatibility alias for OpenOrbis' `OrbisKernelStat` so file-size checks in map-image loading compile against the open toolchain.
