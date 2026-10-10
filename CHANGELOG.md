@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.30 (fix SPRX release publishing; desktop package remains 1.2.1.4)
+- Give the generic OpenOrbis and GoldHEN build logs distinct asset names. Uploading two files named `build.log` made the rolling-release upload collide and fail with a GitHub 404 after compilation succeeded.
+- Synchronize the GoldHEN plugin metadata and startup version string to 1.2.1.30.
+
 ## Fork 1.2.1.29 (exported GoldHEN callbacks and fail-closed build validation; desktop package remains 1.2.1.4)
 - Link the GoldHEN PRX with --export-dynamic so plugin_load/plugin_unload are included in the dynamic symbol table that the plugin loader resolves.
 - Make both ELF verifier recipes propagate failures instead of hiding Python verifier errors behind tee; require explicit callback/entrypoint validation before packaging.

@@ -451,7 +451,7 @@ extern "C"
 __attribute__((visibility("default"))) const char* g_pluginName = "BO3 Customs";
 __attribute__((visibility("default"))) const char* g_pluginDesc = "Black Ops III 1.33 custom map loader";
 __attribute__((visibility("default"))) const char* g_pluginAuth = "BO3 Customsme";
-__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x0102011D; // Fork 1.2.1.27
+__attribute__((visibility("default"))) uint32_t g_pluginVersion = 0x0102011E; // Fork 1.2.1.30
 __attribute__((visibility("hidden")))
 #endif
 int module_start(size_t argc, const void* args)

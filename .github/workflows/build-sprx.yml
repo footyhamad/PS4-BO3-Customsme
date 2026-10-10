@@ -73,7 +73,7 @@ jobs:
           make -C SPRX clean all 2>&1 | tee "$RUNNER_TEMP/sprx-build.log"
           result=$?
           set -e
-          cp "$RUNNER_TEMP/sprx-build.log" SPRX/build/openorbis/build.log
+          cp "$RUNNER_TEMP/sprx-build.log" SPRX/build/openorbis/openorbis-build.log
           if [[ $result -ne 0 ]]; then exit "$result"; fi
           test -s SPRX/build/openorbis/BO3-Customs.sprx
           sha256sum SPRX/build/openorbis/BO3-Customs.sprx | tee SPRX/build/openorbis/BO3-Customs.sprx.sha256
@@ -90,7 +90,7 @@ jobs:
           make -C SPRX -f Makefile.goldhen clean all 2>&1 | tee "$RUNNER_TEMP/goldhen-build.log"
           result=$?
           set -e
-          cp "$RUNNER_TEMP/goldhen-build.log" SPRX/build/goldhen/build.log
+          cp "$RUNNER_TEMP/goldhen-build.log" SPRX/build/goldhen/goldhen-build.log
           if [[ $result -ne 0 ]]; then exit "$result"; fi
           test -s SPRX/build/goldhen/BO3-Customs.prx
           sha256sum SPRX/build/goldhen/BO3-Customs.prx | tee SPRX/build/goldhen/BO3-Customs.prx.sha256
@@ -108,13 +108,13 @@ jobs:
             SPRX/build/openorbis/BO3-Customs.elf
             SPRX/build/openorbis/BO3-Customs.oelf
             SPRX/build/openorbis/BO3-Customs.symbols.txt
-            SPRX/build/openorbis/build.log
+            SPRX/build/openorbis/openorbis-build.log
             SPRX/build/goldhen/BO3-Customs.prx
             SPRX/build/goldhen/BO3-Customs.prx.sha256
             SPRX/build/goldhen/BO3-Customs.elf
             SPRX/build/goldhen/BO3-Customs.oelf
             SPRX/build/goldhen/BO3-Customs.symbols.txt
-            SPRX/build/goldhen/build.log
+            SPRX/build/goldhen/goldhen-build.log
           if-no-files-found: warn
           retention-days: 30
 
@@ -138,10 +138,10 @@ jobs:
           gh release upload "$tag" \
             SPRX/build/openorbis/BO3-Customs.sprx \
             SPRX/build/openorbis/BO3-Customs.sprx.sha256 \
-            SPRX/build/openorbis/build.log \
+            SPRX/build/openorbis/openorbis-build.log \
             SPRX/build/goldhen/BO3-Customs.prx \
             SPRX/build/goldhen/BO3-Customs.prx.sha256 \
-            SPRX/build/goldhen/build.log \
+            SPRX/build/goldhen/goldhen-build.log \
             SPRX/BUILD-OPENORBIS.md \
             SPRX/DIAGNOSTICS.md \
             SPRX/FORK_VERSION.txt \
