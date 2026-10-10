@@ -261,8 +261,6 @@ static void* start_thread(void*)
     BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "starting Lua/UI hooks and patches");
     T7Lua_Install(base);
 
-    BO3Diag_Log(BO3_DIAG_INFO, "BOOT", "starting keyboard/mouse integration");
-    T7Kbm_Install(base);
     T7Log_Write("[Maps] %d custom map(s) found", T7Maps_MapCount());
 
     const uintptr_t frameAddress = base + kComFrame;
