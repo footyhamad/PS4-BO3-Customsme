@@ -1,4 +1,4 @@
-name: Build BO3 Customs SPRX (OpenOrbis)
+name: Build BO3 Customs SPRX and GoldHEN PRX
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - "SPRX/**"
       - ".github/workflows/build-sprx.yml"
       - "CHANGELOG.md"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -22,7 +23,7 @@ jobs:
       - name: Install host toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-18 lld-18 make curl file binutils python3
+          sudo apt-get install -y clang-18 lld-18 make curl file binutils python3 git
 
       - name: Download OpenOrbis PS4 Toolchain v0.5.4
         shell: bash
@@ -47,41 +48,73 @@ jobs:
           echo "OpenOrbis root: $root"
           find "$root" -maxdepth 3 -type f \( -name create-fself -o -name crtlib.o -o -name crt1.o -o -name link.x \) -print
 
-      - name: Compile and package SPRX
+      - name: Download pinned GoldHEN Plugins SDK CRT
         shell: bash
         run: |
-          set +e
-          make -C SPRX clean all 2>&1 | tee "$RUNNER_TEMP/sprx-build.log"
-          result=${PIPESTATUS[0]}
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/GoldHEN_Plugins_SDK"
+          git clone https://github.com/GoldHEN/GoldHEN_Plugins_SDK.git "$sdk"
+          git -C "$sdk" checkout bcea3c7ef01dac6d7f9f49ebf9e90fe66d86f5f7
+          test -s "$sdk/crt/crtprx.c"
+          echo "GOLDHEN_SDK=$sdk" >> "$GITHUB_ENV"
+          echo "GoldHEN SDK CRT revision: $(git -C "$sdk" rev-parse HEAD)"
+
+      - name: Build generic OpenOrbis SPRX
+        shell: bash
+        run: |
+          set -euo pipefail
           mkdir -p SPRX/build/openorbis
+          set +e
+          set -o pipefail
+          make -C SPRX clean all 2>&1 | tee "$RUNNER_TEMP/sprx-build.log"
+          result=$?
+          set -e
           cp "$RUNNER_TEMP/sprx-build.log" SPRX/build/openorbis/build.log
-          if [[ $result -ne 0 ]]; then
-            exit "$result"
-          fi
+          if [[ $result -ne 0 ]]; then exit "$result"; fi
           test -s SPRX/build/openorbis/BO3-Customs.sprx
           sha256sum SPRX/build/openorbis/BO3-Customs.sprx | tee SPRX/build/openorbis/BO3-Customs.sprx.sha256
           file SPRX/build/openorbis/BO3-Customs.sprx
           readelf -h SPRX/build/openorbis/BO3-Customs.elf
-          echo "Built SPRX SHA-256:"
-          sha256sum SPRX/build/openorbis/BO3-Customs.sprx
 
-      - name: Upload build artifact and logs
+      - name: Build GoldHEN Plugins-compatible PRX
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p SPRX/build/goldhen
+          set +e
+          set -o pipefail
+          make -C SPRX -f Makefile.goldhen clean all 2>&1 | tee "$RUNNER_TEMP/goldhen-build.log"
+          result=$?
+          set -e
+          cp "$RUNNER_TEMP/goldhen-build.log" SPRX/build/goldhen/build.log
+          if [[ $result -ne 0 ]]; then exit "$result"; fi
+          test -s SPRX/build/goldhen/BO3-Customs.prx
+          sha256sum SPRX/build/goldhen/BO3-Customs.prx | tee SPRX/build/goldhen/BO3-Customs.prx.sha256
+          file SPRX/build/goldhen/BO3-Customs.prx
+          readelf -h SPRX/build/goldhen/BO3-Customs.elf
+
+      - name: Upload both builds and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: BO3-Customs-SPRX-${{ github.sha }}
+          name: BO3-Customs-PS4-${{ github.sha }}
           path: |
             SPRX/build/openorbis/BO3-Customs.sprx
             SPRX/build/openorbis/BO3-Customs.sprx.sha256
             SPRX/build/openorbis/BO3-Customs.elf
             SPRX/build/openorbis/BO3-Customs.oelf
             SPRX/build/openorbis/BO3-Customs.symbols.txt
-            SPRX/build/openorbis/link.x
             SPRX/build/openorbis/build.log
+            SPRX/build/goldhen/BO3-Customs.prx
+            SPRX/build/goldhen/BO3-Customs.prx.sha256
+            SPRX/build/goldhen/BO3-Customs.elf
+            SPRX/build/goldhen/BO3-Customs.oelf
+            SPRX/build/goldhen/BO3-Customs.symbols.txt
+            SPRX/build/goldhen/build.log
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Publish separate SPRX rolling release
+      - name: Publish separate SPRX and GoldHEN PRX rolling release
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,17 +125,20 @@ jobs:
           version="$(cat SPRX/FORK_VERSION.txt | tr -d '\r\n')"
           git tag -f "$tag" "${{ github.sha }}"
           git push origin "refs/tags/$tag" --force
+          notes="BO3 1.33 only. Use BO3-Customs.prx for the GoldHEN Plugins system; it exports plugin_load/plugin_unload and uses the official GoldHEN plugin CRT. Use BO3-Customs.sprx only with a generic loader that starts module_start. Successful CI build does not substitute for console testing."
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "PS4 BO3 Customs SPRX $version" \
-              --notes "OpenOrbis build for BO3 1.33 only. Inspect the workflow build log and verify console behavior before use." --latest=false
+            gh release edit "$tag" --title "PS4 BO3 Customs SPRX + GoldHEN PRX $version" --notes "$notes" --latest=false
           else
-            gh release create "$tag" --title "PS4 BO3 Customs SPRX $version" \
-              --notes "OpenOrbis build for BO3 1.33 only. Inspect the workflow build log and verify console behavior before use." --latest=false
+            gh release create "$tag" --title "PS4 BO3 Customs SPRX + GoldHEN PRX $version" --notes "$notes" --latest=false
           fi
           gh release upload "$tag" \
             SPRX/build/openorbis/BO3-Customs.sprx \
             SPRX/build/openorbis/BO3-Customs.sprx.sha256 \
             SPRX/build/openorbis/build.log \
+            SPRX/build/goldhen/BO3-Customs.prx \
+            SPRX/build/goldhen/BO3-Customs.prx.sha256 \
+            SPRX/build/goldhen/build.log \
             SPRX/BUILD-OPENORBIS.md \
+            SPRX/DIAGNOSTICS.md \
             SPRX/FORK_VERSION.txt \
             --clobber
