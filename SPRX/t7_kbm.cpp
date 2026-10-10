@@ -531,6 +531,7 @@ static bool     g_inputReady = false;
 static bool     g_textReady = false;
 static bool     g_configLoaded = false;
 static uint32_t g_openLogs = 0;
+static uint32_t g_inputTraceCount = 0;
 static int32_t  g_capture = 0;
 static int32_t  g_proneKey = 0;
 static uint32_t g_proneDownAt = 0;
@@ -1175,6 +1176,8 @@ static void LoadConfig()
     if (fd < 0)
     {
         ResetBinds();
+        BO3Diag_Log(BO3_DIAG_INFO, "KBM",
+            "config not present at %s; loaded built-in default bindings", kConfigPath);
         return;
     }
 
@@ -1211,6 +1214,15 @@ static void LoadConfig()
 
     if (!anyBind)
         ResetBinds();
+
+    uint32_t bindCount = 0;
+    for (int32_t key = 1; key < 256; ++key)
+        if (g_keyCommand[key] > 0 && g_keyCommand[key] < kCommandCount)
+            ++bindCount;
+
+    BO3Diag_Log(BO3_DIAG_INFO, "KBM",
+        "config loaded path=%s bytes=%llu mapped_keys=%u custom_config=%s",
+        kConfigPath, (unsigned long long)used, bindCount, anyBind ? "yes" : "no-defaults-used");
 }
 
 static void MakeDvars()
@@ -1481,14 +1493,15 @@ static void SetLastInput(int32_t lc, int32_t device)
     g_inputChangedAt[lc] = now;
     *last = device;
 
-    const bool gamepadSwitch = old == kInputPad || device == kInputPad;
+    const bool gamepadSwitch = old == kInputPad || pad;
     ((InputNotify_t)(g_base + kInputNotify))(lc, gamepadSwitch ? 1 : 0);
 
-    if (gamepadSwitch)
-        ((PadBindings_t)(g_base + kPadBindings))(controller);
-
+    // Only rebuild controller binds when switching TO a controller. Calling
+    // PadBindings while switching away from the controller at the title/menu
+    // can touch controller state before the menu has created a local client.
     if (pad)
     {
+        ((PadBindings_t)(g_base + kPadBindings))(controller);
         CancelCapture();
         HideCursor();
     }
@@ -1813,15 +1826,38 @@ static void OnKey(int32_t key, bool down, bool repeat)
     if (lower <= 0 || lower > 255)
         return;
 
+    // Keep input breadcrumbs bounded but detailed enough to locate a crash.
+    const bool trace = !repeat && g_inputTraceCount < 80;
+    const uint32_t traceSeq = trace ? ++g_inputTraceCount : 0;
+    const uint8_t commandId = g_keyCommand[lower];
+    const char* const commandName = (commandId > 0 && commandId < kCommandCount)
+        ? k_commands[commandId].name : "(unbound)";
+    const unsigned int commandKind = commandId < kCommandCount
+        ? (unsigned int)k_commands[commandId].kind : 0u;
+
+    if (trace)
+        BO3Diag_Log(BO3_DIAG_INFO, "INPUT",
+            "key begin seq=%u raw=%d normalized=%d state=%s repeat=%d lc=%d command=%s kind=%u",
+            traceSeq, key, lower, down ? "down" : "up", repeat ? 1 : 0, lc,
+            commandName, commandKind);
+
     if (down && !repeat)
     {
         SetLastInput(lc, lower >= kKeyMouse1 ? kInputMouseButton : kInputKeyboard);
+        if (trace)
+            BO3Diag_Log(BO3_DIAG_INFO, "INPUT", "key seq=%u passed SetLastInput", traceSeq);
 
         if (!g_sentAs[lower] && CaptureKey(lower))
+        {
+            if (trace)
+                BO3Diag_Log(BO3_DIAG_INFO, "INPUT", "key seq=%u consumed by key capture", traceSeq);
             return;
+        }
     }
 
     const bool menu = InMenu(lc);
+    if (trace)
+        BO3Diag_Log(BO3_DIAG_INFO, "INPUT", "key seq=%u input_state in_menu=%d", traceSeq, menu ? 1 : 0);
 
     if (down && repeat)
     {
@@ -1843,9 +1879,17 @@ static void OnKey(int32_t key, bool down, bool repeat)
         if (g_sentAs[lower])
             return;
 
-        const int32_t send = menu ? MenuKey(key, LuiCatches(lc)) : key;
+        // BO3's engine bind table is indexed by lowercase key codes. Sending
+        // uppercase letters bypasses bindings such as W/A/S/D, F, R, and Q.
+        const int32_t send = menu ? MenuKey(lower, LuiCatches(lc)) : lower;
         g_sentAs[lower] = (uint8_t)send;
+        if (trace)
+            BO3Diag_Log(BO3_DIAG_INFO, "INPUT",
+                "key seq=%u dispatch keycode=%d menu=%d stage=before-KeyEvent",
+                traceSeq, send, menu ? 1 : 0);
         SendKey(lc, send, 1, false);
+        if (trace)
+            BO3Diag_Log(BO3_DIAG_INFO, "INPUT", "key seq=%u KeyEvent returned", traceSeq);
 
         if (menu)
             return;
@@ -1853,7 +1897,13 @@ static void OnKey(int32_t key, bool down, bool repeat)
         g_pressed[lower] = g_keyCommand[lower];
 
         if (g_pressed[lower])
+        {
             RunCommand(lc, lower, g_pressed[lower], true);
+            if (trace)
+                BO3Diag_Log(BO3_DIAG_INFO, "INPUT",
+                    "key seq=%u custom command press completed command=%s",
+                    traceSeq, commandName);
+        }
 
         return;
     }
@@ -1862,7 +1912,15 @@ static void OnKey(int32_t key, bool down, bool repeat)
     g_sentAs[lower] = 0;
 
     if (sent != kSwallowed)
-        SendKey(lc, sent ? sent : key, 0, false);
+    {
+        if (trace)
+            BO3Diag_Log(BO3_DIAG_INFO, "INPUT",
+                "key seq=%u release dispatch keycode=%d stage=before-KeyEvent",
+                traceSeq, sent ? sent : lower);
+        SendKey(lc, sent ? sent : lower, 0, false);
+        if (trace)
+            BO3Diag_Log(BO3_DIAG_INFO, "INPUT", "key seq=%u release KeyEvent returned", traceSeq);
+    }
 
     if (g_pressed[lower])
     {
@@ -1940,6 +1998,10 @@ static SceUserServiceUserId MouseUser()
 static void SetMouseButtons(uint32_t buttons)
 {
     const uint32_t changed = buttons ^ g_mouseButtons;
+    if (changed)
+        BO3Diag_Log(BO3_DIAG_INFO, "MOUSE",
+            "button state old=0x%02X new=0x%02X changed=0x%02X",
+            g_mouseButtons, buttons, changed);
     g_mouseButtons = buttons;
 
     for (int32_t i = 0; i < kMouseButtons; ++i)
@@ -2027,44 +2089,66 @@ static void PollMouse(int32_t lc)
         return;
     }
 
-    SceMouseData data[kMouseRecords];
+    SceMouseData data[kMouseRecords] = {};
     const int count = sceMouseRead(g_mouseHandle, data, kMouseRecords);
 
     if (count == kMouseLoggedOut)
     {
+        BO3Diag_Log(BO3_DIAG_WARN, "MOUSE", "sceMouseRead reports user logged out; closing handle=%d",
+            g_mouseHandle);
         sceMouseClose(g_mouseHandle);
         g_mouseHandle = -1;
         SetMouseButtons(0);
         return;
     }
 
+    if (count < 0)
+    {
+        static uint32_t readErrorsLogged = 0;
+        if (readErrorsLogged < 12)
+        {
+            ++readErrorsLogged;
+            BO3Diag_Log(BO3_DIAG_WARN, "MOUSE",
+                "sceMouseRead failed rc=0x%08X handle=%d occurrence=%u",
+                (uint32_t)count, g_mouseHandle, readErrorsLogged);
+        }
+        return;
+    }
+
+    if (count > kMouseRecords)
+    {
+        BO3Diag_Log(BO3_DIAG_ERROR, "MOUSE",
+            "sceMouseRead returned impossible record count=%d capacity=%d; ignoring this sample",
+            count, kMouseRecords);
+        return;
+    }
+
     int32_t dx = 0;
     int32_t dy = 0;
+    uint32_t combinedButtons = 0;
 
     for (int i = 0; i < count; ++i)
     {
         const SceMouseData& record = data[i];
-        uint32_t buttons = 0;
-        int32_t wheel = 0;
+        if (!record.connected || (record.buttons & SCE_MOUSE_BUTTON_INTERCEPTED) != 0)
+            continue;
 
-        if (record.connected && (record.buttons & SCE_MOUSE_BUTTON_INTERCEPTED) == 0)
-        {
-            dx += record.xAxis;
-            dy += record.yAxis;
-            buttons = record.buttons & kMouseButtonMask;
-            wheel = record.wheel;
+        dx += record.xAxis;
+        dy += record.yAxis;
+        combinedButtons |= record.buttons & kMouseButtonMask;
 
-            if (record.xAxis || record.yAxis || buttons || wheel)
-                g_mouseUsed = true;
-        }
+        if (record.xAxis || record.yAxis || (record.buttons & kMouseButtonMask) || record.wheel)
+            g_mouseUsed = true;
 
-        SetMouseButtons(buttons);
-
-        if (wheel > 0)
+        if (record.wheel > 0)
             Wheel(kKeyWheelUp);
-        else if (wheel < 0)
+        else if (record.wheel < 0)
             Wheel(kKeyWheelDown);
     }
+
+    // Merge all connected records before dispatching transitions. An empty
+    // later record must not release a button reported by an earlier record.
+    SetMouseButtons(combinedButtons);
 
     if (Abs((float)dx) + Abs((float)dy) >= (float)kMouseMoveReport)
         SetLastInput(lc, kInputMouseButton);

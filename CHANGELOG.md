@@ -1,5 +1,11 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.35 (fix keyboard dispatch and stabilize mouse button handling; desktop package remains 1.2.1.4)
+- Normalize ordinary keyboard letters to lowercase before forwarding to BO3 so engine bindings and the custom key map use the same key codes.
+- Avoid rebuilding controller bindings when switching away from gamepad input; this was an unsafe call during title/menu mouse input.
+- Aggregate buttons across all mouse records before dispatching transitions, guard invalid read counts, and log mouse button changes/read errors.
+- Add bounded per-key dispatch breadcrumbs and effective config bind counts to diagnostics.log. BO3 1.33 runtime testing is still required.
+
 ## Fork 1.2.1.34 (fix: compile keybind editor and install the UI hook before mouse.lua; desktop package remains 1.2.1.4)
 - Fixed the CI compile failure caused by an unnecessary forward call to PostEvent from the new bind-setting poller.
 - Install the DataSourceHelpers list interceptor before loading mouse.lua, so it can append key selectors while the Mouse/KBM settings datasource is created.

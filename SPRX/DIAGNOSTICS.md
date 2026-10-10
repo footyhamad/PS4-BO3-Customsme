@@ -63,3 +63,8 @@ The OpenOrbis linker includes `crtlib.o`, which also defines `module_start` and 
 ## Keyboard/mouse binding settings (Fork 1.2.1.34)
 
 The existing Mouse/KBM settings datasource now receives per-action key selectors for movement, jump, sprint, prone, interact, reload, attack/aim, melee, weapon switching, inventory, grenades/tactical, specialist, weapon slots, scoreboard and pause. Changed key selections are reflected immediately in the runtime key table and persisted to `/data/BO3-Customs/kbm.cfg`. The key choices exclude Escape, the console key, backspace, uppercase duplicate key codes, and controller button codes so settings/menu navigation is not overwritten. If the selectors do not appear, confirm the console package's `ui_scripts/mouse.lua` is installed and inspect the `[KBM-UI]` record in `diagnostics.log`.
+
+
+## Keyboard and mouse input triage (Fork 1.2.1.35)
+
+The `[INPUT]` records are intentionally bounded to the first 80 non-repeat key events per module session. Each record identifies the raw and normalized key, mapped command, whether the game is in menu mode, and the last dispatch stage reached. If a crash occurs during a key event, inspect the last `key begin` / `stage=before-KeyEvent` lines. `[MOUSE]` records show read errors and aggregated button transitions. `[KBM] config loaded` reports how many key mappings were active.
