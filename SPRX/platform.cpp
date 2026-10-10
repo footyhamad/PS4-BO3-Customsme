@@ -13,7 +13,7 @@ namespace {
         kNotificationRequestWithIcon = 1,
     };
 
-    struct NotificationRequest {
+    struct BO3NotificationRequest {
         NotificationType type;
         int32_t reqId;
         int32_t priority;
@@ -35,10 +35,38 @@ namespace {
     SendNotification_t g_sendNotification = nullptr;
     bool g_notificationReady = false;
 
+#ifdef BO3_OPENORBIS
+    // OpenOrbis v0.5.4 virtual-query ABI view. Some packaged headers expose
+    // inconsistent field names, so access stable ABI offsets through this checked view.
+    struct OpenOrbisVirtualQueryInfoView
+    {
+        void* start_addr;
+        void* end_addr;
+        int64_t offset;
+        int32_t prot;
+        int32_t mtype;
+        unsigned isFlexibleMemory : 1;
+        unsigned isDirectMemory : 1;
+        unsigned isStack : 1;
+        unsigned isPooledMemory : 1;
+        unsigned isCommitted : 1;
+        char name[32];
+    };
+    static_assert(sizeof(OpenOrbisVirtualQueryInfoView) == sizeof(SceKernelVirtualQueryInfo),
+        "OpenOrbis virtual-query ABI size changed; update the view before building");
+    static_assert(offsetof(OpenOrbisVirtualQueryInfoView, name) == offsetof(SceKernelVirtualQueryInfo, name),
+        "OpenOrbis virtual-query name offset changed; update the view before building");
+
+    static const OpenOrbisVirtualQueryInfoView& QueryView(const SceKernelVirtualQueryInfo& info)
+    {
+        return *reinterpret_cast<const OpenOrbisVirtualQueryInfoView*>(&info);
+    }
+#endif
+
     static uintptr_t QueryStart(const SceKernelVirtualQueryInfo& info)
     {
 #ifdef BO3_OPENORBIS
-        return (uintptr_t)info.start_addr;
+        return (uintptr_t)QueryView(info).start_addr;
 #else
         return (uintptr_t)info.start;
 #endif
@@ -47,7 +75,7 @@ namespace {
     static uintptr_t QueryEnd(const SceKernelVirtualQueryInfo& info)
     {
 #ifdef BO3_OPENORBIS
-        return (uintptr_t)info.end_addr;
+        return (uintptr_t)QueryView(info).end_addr;
 #else
         return (uintptr_t)info.end;
 #endif
@@ -56,9 +84,18 @@ namespace {
     static int QueryProtection(const SceKernelVirtualQueryInfo& info)
     {
 #ifdef BO3_OPENORBIS
-        return info.prot;
+        return QueryView(info).prot;
 #else
         return info.protection;
+#endif
+    }
+
+    static const char* QueryName(const SceKernelVirtualQueryInfo& info)
+    {
+#ifdef BO3_OPENORBIS
+        return QueryView(info).name;
+#else
+        return info.name;
 #endif
     }
 }
@@ -88,7 +125,7 @@ uint64_t GetBaseAddress() {
 
         address = (void*)end;
 
-        if (QueryProtection(info) != 5 || strcmp(info.name, "executable") != 0)
+        if (QueryProtection(info) != 5 || strcmp(QueryName(info), "executable") != 0)
             continue;
 
         cached = start;
@@ -134,8 +171,8 @@ static uintptr_t ReadableEnd(uintptr_t addr, size_t need) {
         if ((QueryProtection(info) & 1) == 0)
             break;
 
-        const uintptr_t start = (uintptr_t)info.start;
-        const uintptr_t stop = (uintptr_t)info.end;
+        const uintptr_t start = QueryStart(info);
+        const uintptr_t stop = QueryEnd(info);
 
         if (stop <= start || probe < start || probe >= stop || (end && start > end))
             break;
@@ -208,7 +245,7 @@ void Notify(const char* fmt, ...) {
             g_sendNotification = (SendNotification_t)address;
     }
 
-    NotificationRequest request{};
+    BO3NotificationRequest request{};
 
     va_list va;
     va_start(va, fmt);

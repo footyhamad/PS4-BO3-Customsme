@@ -37,3 +37,6 @@ A successful link proves that the sources compile against OpenOrbis, not that ev
 ## OpenOrbis security/feature boundary
 
 The OpenOrbis Makefile excludes `libjbc.cpp`, which contains a bundled kernel credential/memory helper incompatible with the OpenOrbis host headers. The OpenOrbis binary therefore does not include that helper, and startup logs explicitly report that automatic external-drive sandbox mounts are disabled. Local custom-map discovery remains enabled; external roots must already be mounted and visible to the process. The original Visual Studio/Sony SDK project is left unchanged.
+
+
+Fork 1.2.1.18 adds a size/offset-checked ABI view for OpenOrbis virtual-query metadata and uniquely names the notification payload type to avoid public SDK header collisions.

@@ -26,3 +26,8 @@ This is persistent crash-triage logging, **not a native PS4 crash dump**. If the
 ## OpenOrbis build limitation (Fork 1.2.1.17)
 
 The OpenOrbis build intentionally omits the bundled `libjbc.cpp` kernel credential/memory helper. Automatic USB/extended-drive sandbox mounting is therefore disabled in that build and a warning is written at startup. Maps under the accessible local `/data/BO3-Customs` path remain supported. External roots are scanned only if they are already visible inside the process sandbox. The existing Sony SDK/Visual Studio project continues to use its original source list; test that path separately.
+
+
+## OpenOrbis portability update (Fork 1.2.1.18)
+
+The OpenOrbis path now reads virtual-query address/protection/name fields through a size-checked local view of the v0.5.4 ABI layout, avoiding compiler dependence on inconsistent member names. The local notification payload structure also has a unique name to avoid collisions with SDK declarations. These are compile-compatibility changes; successful compilation and console runtime behavior still need confirmation.

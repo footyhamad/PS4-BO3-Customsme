@@ -1,5 +1,9 @@
 # PS4 BO3 Customsme — Fork Changelog
 
+## Fork 1.2.1.18 (fix OpenOrbis virtual-query and notification type collisions; desktop package remains 1.2.1.4)
+- Routed OpenOrbis virtual-query access through a local v0.5.4 ABI view with size and name-offset checks; fixed range scanning to use the same field accessors consistently.
+- Renamed the local notification payload structure to prevent collision with OpenOrbis SDK declarations.
+
 ## Fork 1.2.1.17 (make OpenOrbis build independent of bundled kernel helper; desktop package remains 1.2.1.4)
 - Excluded `libjbc.cpp` from the OpenOrbis source list and guarded its sandbox-mount calls from that build, avoiding its conflicting raw `getcwd` syscall wrapper and omitting kernel credential/memory helper code.
 - Logged the OpenOrbis external-drive-mount limitation at startup and documented that local custom maps remain supported; the Sony SDK/Visual Studio source path is unchanged.
