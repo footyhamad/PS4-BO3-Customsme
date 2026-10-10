@@ -263,31 +263,69 @@ public partial class MainWindow : Window
         Job? job = SingleSelectedJob();
         if (job == null || _testing || _running || _clearing)
             return;
-        string path = Path.Combine(Workspace.ReportDirectory, job.Name + ".map-port.json");
+
+        bool isMod = job.PackageFolder is { Length: > 0 };
+        string path = isMod
+            ? Path.Combine(Settings.OutputFor(job), "mod-port.json")
+            : Path.Combine(Workspace.ReportDirectory, job.Name + ".map-port.json");
+        string title = isMod ? "Mod diagnostics" : "Map diagnostics";
         if (!File.Exists(path))
         {
-            SetStatus("No diagnostics yet", "Convert the map first.");
+            SetStatus("No diagnostics yet", isMod ? "Convert the mod first." : "Convert the map first.");
             return;
         }
+
         try
         {
             using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
             JsonElement root = doc.RootElement;
-            string[] problems = root.TryGetProperty("problems", out JsonElement p) && p.ValueKind == JsonValueKind.Array
-                ? p.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
-            string[] warnings = root.TryGetProperty("warnings", out JsonElement w) && w.ValueKind == JsonValueKind.Array
-                ? w.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray() : [];
-            var lines = new List<string> { $"Diagnostics: {job.Name}", "", $"Errors / problems: {problems.Length}", $"Warnings: {warnings.Length}", "" };
+            string[] problems = ReadStringArray(root, "problems");
+            string[] warnings = ReadStringArray(root, "warnings");
+            string[] unconverted = isMod ? ReadStringArray(root, "unconverted_files") : [];
+            var lines = new List<string>
+            {
+                $"Diagnostics: {job.Name}",
+                $"Report: {path}",
+                "",
+                $"Errors / problems: {problems.Length}",
+                $"Warnings: {warnings.Length}"
+            };
+
+            if (isMod)
+            {
+                lines.Add($"Unconverted source/sidecar files: {unconverted.Length}");
+                lines.Add("");
+                if (root.TryGetProperty("zones", out JsonElement zones) && zones.ValueKind == JsonValueKind.Array)
+                {
+                    lines.Add("Fastfile groups:");
+                    foreach (JsonElement zone in zones.EnumerateArray())
+                    {
+                        string source = zone.TryGetProperty("source", out JsonElement sourceValue)
+                            ? sourceValue.GetString() ?? sourceValue.ToString() : "(unknown zone)";
+                        bool success = zone.TryGetProperty("success", out JsonElement successValue)
+                            && successValue.ValueKind == JsonValueKind.True;
+                        lines.Add($"  {(success ? "OK   " : "FAIL ")}{source}");
+                    }
+                    lines.Add("");
+                }
+                lines.AddRange(unconverted.Select(x => "UNCONVERTED  " + x));
+            }
+
             lines.AddRange(problems.Select(x => "ERROR  " + x));
             lines.AddRange(warnings.Select(x => "WARN   " + x));
-            MessageBox.Show(this, string.Join(Environment.NewLine, lines.Take(120)), "Map diagnostics", MessageBoxButton.OK,
-                problems.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            MessageBox.Show(this, string.Join(Environment.NewLine, lines.Take(120)), title, MessageBoxButton.OK,
+                problems.Length > 0 || unconverted.Length > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
-        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException)
         {
-            MessageBox.Show(this, $"Could not read diagnostics.\n\n{error.Message}", "Map diagnostics", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, $"Could not read diagnostics.\n\n{error.Message}", title, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
+
+    private static string[] ReadStringArray(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Select(x => x.GetString() ?? x.ToString()).ToArray()
+            : [];
 
     private void HistoryClick(object sender, RoutedEventArgs e)
     {
